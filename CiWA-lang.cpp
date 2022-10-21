@@ -250,12 +250,6 @@ int main()
 
 				/*****************************************************/
 
-				/* 
-					TODO : Type attribution after already having declared it 
-					- tries to find the name in the programm operations
-					- if it doesn't: exits program with code 1 and saying that used variable without declaring it first
-				*/
-
 				/*				---	CONDITIONAL ---				*/
 
 				if (word == "if") {
@@ -340,6 +334,29 @@ int main()
 					op.OP_LABEL = StrToCharPointer("End");
 					_Stack_.push_back(op);
 					break;
+				}
+
+				/*****************************************************/
+
+				/* 
+					TODO : Type attribution after already having declared it 
+					- tries to find the name in the programm operations
+					- if it doesn't: exits program with code 1 and saying that used variable without declaring it first
+				*/
+
+				/*			---	TYPE ATTRIBUTION ---			*/
+
+				operation varDefinition;
+				for(int i=0; i<_Stack_.size(); i++){
+					operation op = _Stack_.front();
+					if (word == op.OP_LABEL) {
+						varDefinition = op;
+					}
+				}
+
+				if (varDefinition.OP_LABEL != "") {
+					cout << "--- compile error in line (" << countLines + 1 << "): '" << line << "';\n variable name not declared.\n";
+					exit(1);
 				}
 
 				/*****************************************************/
