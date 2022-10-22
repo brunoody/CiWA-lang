@@ -4,8 +4,6 @@
     
 -- There are two basic ways of syntax writting: 1. with arrow-function-like code after a condition or loop (which means inline code, working only for a single command), or 2. with the use of the special word 'end' to finish the block.
 
--- One important note is that all If-clauses are Else-less, which means that the 'If' code will be executed when the condition is met, but there's no 'Else' code; the lines of code after the end of the If-clause are already consired enough to meet the Else-statement requirements and features. Also, this leads to the use of only If-clauses (Else-If-clauses don't exist here)!
-
 # Some syntax basic examples:
 -- With arrow-function-like (a block of a single command):
 
