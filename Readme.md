@@ -23,14 +23,17 @@ while i == 0 => ...
 
     == For loops:
 for items => int i, var item                <<<--- from the list 'items' it extracts the key 'i' and the value 'item' as a tuple
+
     ...
 end
 
 for items => var item                       <<<--- from the list 'items' it extracts the tuple (key, value) as well, but only keeps the value 'item' stored in memory
+
     ...
 end
 
 for range[-n:n] => int i                    <<<--- standard 'for' loop with no Array/List as anchor - from '-n' to 'n'
+
     ...
 end
 
