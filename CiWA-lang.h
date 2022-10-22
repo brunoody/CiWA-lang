@@ -6,5 +6,3 @@
 #include <iostream>
 #include <fstream>
 #include <string>
-
-// TODO: Referencie os cabeçalhos adicionais de que seu programa precisa aqui.

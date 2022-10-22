@@ -30,6 +30,7 @@ int IOTA(bool reset = false) {
 #define __OP_VARPUSH__ IOTA()
 #define __OP_VARPOP__ IOTA()
 #define __OP_CONSTDEF__ IOTA()
+#define __OP_VARSETVAL__ IOTA()
 
 /*	 COMMANDS	*/
 #define __OP_IFSTART__ IOTA()
@@ -46,9 +47,9 @@ int IOTA(bool reset = false) {
 /***************************************/
 
 struct operation {
-	short OP_TYPE;
-	char* OP_LABEL; // the address label or typename for the WebAssembly code
-	char* OP_VALUE; // can be any size of byte[], basically
+	short OP_TYPE = -1;
+	char* OP_LABEL = 0; // the address label or typename for the WebAssembly code
+	char* OP_VALUE = 0; // can be any size of byte[], basically
 };
 
 char* StrToCharPointer(string str) {
@@ -73,7 +74,7 @@ int main()
 			if (line.empty()) { // if it's an empty line, just jump to the next one
 				continue;
 			}
-			replace(line.begin(), line.end(), '\t', (char)0);
+			replace(line.begin(), line.end(), '\t', '\0');
 			while (line[0] == '\0') {
 				line = line.substr(1, line.size());
 			}
@@ -93,14 +94,14 @@ int main()
 					
 					word = strtok(NULL, " "); // reads the variable's name
 					if (StrToCharPointer(word) == NULL) {
-						cout << "--- syntax error in line (" << countLines+1 << "): '" << line << "';\n expected variable's name definition.\n";
+						cout << "--- syntax error in line (" << countLines+1 << "): '" << line << "'; <-- expected variable's name definition.\n";
 						exit(1);
 					}
 					op.OP_LABEL = StrToCharPointer(word);
 
 					word = strtok(NULL, " "); // reads the variable's value
 					if (StrToCharPointer(word) == NULL) {
-						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "';\n expected variable's value definition.\n";
+						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected variable's value definition.\n";
 						exit(1);
 					}
 					op.OP_VALUE = new char[4];
@@ -116,14 +117,14 @@ int main()
 
 					word = strtok(NULL, " "); // reads the variable's name
 					if (StrToCharPointer(word) == NULL) {
-						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "';\n expected variable's name definition.\n";
+						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected variable's name definition.\n";
 						exit(1);
 					}
 					op.OP_LABEL = StrToCharPointer(word);
 
 					word = strtok(NULL, " "); // reads the variable's value
 					if (StrToCharPointer(word) == NULL) {
-						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "';\n expected variable's value definition.\n";
+						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected variable's value definition.\n";
 						exit(1);
 					}
 					op.OP_VALUE = new char[8];
@@ -139,14 +140,14 @@ int main()
 
 					word = strtok(NULL, " "); // reads the variable's name
 					if (StrToCharPointer(word) == NULL) {
-						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "';\n expected variable's name definition.\n";
+						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected variable's name definition.\n";
 						exit(1);
 					}
 					op.OP_LABEL = StrToCharPointer(word);
 
 					word = strtok(NULL, " "); // reads the variable's value
 					if (StrToCharPointer(word) == NULL) {
-						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "';\n expected variable's value definition.\n";
+						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected variable's value definition.\n";
 						exit(1);
 					}
 					op.OP_VALUE = new char[4];
@@ -162,14 +163,14 @@ int main()
 
 					word = strtok(NULL, " "); // reads the variable's name
 					if (StrToCharPointer(word) == NULL) {
-						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "';\n expected variable's name definition.\n";
+						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected variable's name definition.\n";
 						exit(1);
 					}
 					op.OP_LABEL = StrToCharPointer(word);
 
 					word = strtok(NULL, " "); // reads the variable's value
 					if (StrToCharPointer(word) == NULL) {
-						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "';\n expected variable's value definition.\n";
+						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected variable's value definition.\n";
 						exit(1);
 					}
 					op.OP_VALUE = new char[8];
@@ -185,14 +186,14 @@ int main()
 
 					word = strtok(NULL, " "); // reads the variable's name
 					if (StrToCharPointer(word) == NULL) {
-						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "';\n expected variable's name definition.\n";
+						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected variable's name definition.\n";
 						exit(1);
 					}
 					op.OP_LABEL = StrToCharPointer(word);
 
 					word = strtok(NULL, " "); // reads the variable's value
 					if (StrToCharPointer(word) == NULL) {
-						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "';\n expected variable's value definition.\n";
+						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected variable's value definition.\n";
 						exit(1);
 					}
 					op.OP_VALUE = new char[1];
@@ -203,42 +204,45 @@ int main()
 				}
 
 				if (word == "char") {
+					// TODO : check for " and ' for char and string
 					operation op;
 					op.OP_TYPE = __OP_CHARACTERPUSH__;
 
 					word = strtok(NULL, " "); // reads the variable's name
 					if (StrToCharPointer(word) == NULL) {
-						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "';\n expected variable's name definition.\n";
+						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected variable's name definition.\n";
 						exit(1);
 					}
 					op.OP_LABEL = StrToCharPointer(word);
 
 					word = strtok(NULL, " "); // reads the variable's value
 					if (StrToCharPointer(word) == NULL) {
-						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "';\n expected variable's value definition.\n";
+						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected variable's value definition.\n";
 						exit(1);
 					}
 					op.OP_VALUE = new char[1];
-					*op.OP_VALUE = (*StrToCharPointer(word));
+					*op.OP_VALUE = *StrToCharPointer(word);
 
 					_Stack_.push_back(op);
 					break;
 				}
 
 				if (word == "var") {
+					// TODO : check for " and ' for char and string
+					// since 'var' is a generic type, it can receive attribution with those
 					operation op;
 					op.OP_TYPE = __OP_VARPUSH__;
 
 					word = strtok(NULL, " "); // reads the variable's name
 					if (StrToCharPointer(word) == NULL) {
-						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "';\n expected variable's name definition.\n";
+						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected variable's name definition.\n";
 						exit(1);
 					}
 					op.OP_LABEL = StrToCharPointer(word);
 
 					word = strtok(NULL, " "); // reads the variable's value
 					if (StrToCharPointer(word) == NULL) {
-						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "';\n expected variable's value definition.\n";
+						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected variable's value definition.\n";
 						exit(1);
 					}
 					op.OP_VALUE = new char[sizeof(*StrToCharPointer(word))];
@@ -257,7 +261,7 @@ int main()
 					popop.OP_TYPE = __OP_VARPOP__;
 					word = strtok(NULL, " "); // reads the variable's name
 					if (StrToCharPointer(word) == NULL) {
-						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "';\n expected variable name for conditional test definition.\n";
+						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected variable name for conditional test definition.\n";
 						exit(1);
 					}
 					popop.OP_LABEL = StrToCharPointer(word);
@@ -266,7 +270,7 @@ int main()
 					operation condop;
 					word = strtok(NULL, " "); // reads the conditional operation
 					if (StrToCharPointer(word) == NULL) {
-						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "';\n expected a conditional operation.\n";
+						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected a conditional operation.\n";
 						exit(1);
 					}
 					
@@ -296,24 +300,24 @@ int main()
 						condop.OP_LABEL = StrToCharPointer("le");
 					}
 					else {
-						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "';\n invalid conditional operation.\n";
+						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- invalid conditional operation.\n";
 						exit(1);
 					}
 
 					operation poporconstop;
 					word = strtok(NULL, " "); // reads the second term for conditional testing
 					if (StrToCharPointer(word) == NULL) {
-						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "';\n expected variable name or a constant for conditional test definition.\n";
+						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected variable name or a constant for conditional test definition.\n";
 						exit(1);
 					}
 					// defines if it is a number or a variable's name
 					if (regex_match(word, r)) {
 						poporconstop.OP_TYPE = __OP_CONSTDEF__;
-						poporconstop.OP_VALUE = StrToCharPointer(word);
+						poporconstop.OP_VALUE = StrToCharPointer(word); // the const value is set
 					}
 					else {
 						poporconstop.OP_TYPE = __OP_VARPOP__;
-						poporconstop.OP_LABEL = StrToCharPointer(word);
+						poporconstop.OP_LABEL = StrToCharPointer(word); // tha variable's name is saved
 					}
 					_Stack_.push_back(poporconstop);
 
@@ -338,27 +342,43 @@ int main()
 
 				/*****************************************************/
 
-				/* 
-					TODO : Type attribution after already having declared it 
-					- tries to find the name in the programm operations
-					- if it doesn't: exits program with code 1 and saying that used variable without declaring it first
+				/*
+					[X] tries to find the name in the programm operations
+					[X] if it doesn't: exits program with code 1 and saying that used variable without declaring it first
+					[X] otherwise goes ahead and updates the variable's value - needs to be a new operation
 				*/
 
 				/*			---	TYPE ATTRIBUTION ---			*/
-
-				operation varDefinition;
-				for(int i=0; i<_Stack_.size(); i++){
-					operation op = _Stack_.front();
-					if (word == op.OP_LABEL) {
-						varDefinition = op;
+				{
+					operation varDefinition;
+					auto op = _Stack_.begin();
+					for (int i = 0; i < _Stack_.size(); i++) {
+						if (op->OP_LABEL != 0) {
+							if (word == op->OP_LABEL) {
+								varDefinition = *op;
+								break;
+							}
+						}
+						advance(op, 1);
 					}
-				}
+					if (varDefinition.OP_LABEL == 0) {
+						cout << "--- compile error in line (" << countLines + 1 << "): '" << line << "'; <-- variable name '" << word << "' not declared.\n";
+						exit(1);
+					}
 
-				if (varDefinition.OP_LABEL != "") {
-					cout << "--- compile error in line (" << countLines + 1 << "): '" << line << "';\n variable name not declared.\n";
-					exit(1);
-				}
+					operation varsetop;
+					varsetop.OP_TYPE = __OP_VARSETVAL__;
+					varsetop.OP_LABEL = varDefinition.OP_LABEL;
 
+					word = strtok(NULL, " "); // reads the value to reset
+					if (StrToCharPointer(word) == NULL) {
+						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected value to be set on variable '" << varsetop.OP_LABEL << "'.\n";
+						exit(1);
+					}
+					varsetop.OP_VALUE = new char[sizeof(*varDefinition.OP_VALUE)];
+					*varsetop.OP_VALUE = *varDefinition.OP_VALUE;
+					break;
+				}
 				/*****************************************************/
 
 			}
@@ -369,9 +389,11 @@ int main()
 		file.close();
 	}
 	else {
-		cout << "file could not be opened..." << "\n\n";
+		cout << "file could not be opened...\n\n";
 		exit(1);
 	}
+
+	cout << "file compiled successfully!\n\n";
 
 	return 0;
 }
