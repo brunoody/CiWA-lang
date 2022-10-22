@@ -5,7 +5,7 @@
 -- There are two basic ways of syntax writting: 1. with arrow-function-like code after a condition or loop (which means inline code, working only for a single command), or 2. with the use of the special word 'end' to finish the block.
 
 # Some syntax basic examples:
--- With arrow-function-like (a block of a single command):
+## With arrow-function-like (a block of a single command):
 
     == For loops:
 for items => int i, var item => ...         <<<--- from the list 'items' it extracts the key 'i' and the value 'item' as a tuple
@@ -19,7 +19,7 @@ if i > 0 => ...
 
 while i == 0 => ...
 
--- With special word 'end' (multiple lines of commands in the block):
+## With special word 'end' (multiple lines of commands in the block):
 
     == For loops:
 for items => int i, var item                <<<--- from the list 'items' it extracts the key 'i' and the value 'item' as a tuple
