@@ -1,6 +1,6 @@
 # CiWA: a stack-based programming language made to be simple and compile to wasm.
 -- The language follows the syntatic aspects of Python and Pascal, joining with arrow-function-like syntax from JavaScript/TypeScript.
-    It also features basic types such as Integer, Boolean and String, but including a generic type variable (var). It was originally written through C - thus being called Cigma - and compiled directly to wasm.
+    It also features basic types such as Integer, Boolean and String, but including a generic type variable (var). It was originally written through C - thus being called CiWA - and compiled directly to wasm.
     
 -- There are two basic ways of syntax writting: 1. with arrow-function-like code after a condition or loop (which means inline code, working only for a single command), or 2. with the use of the special word 'end' to finish the block.
 
