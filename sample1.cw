@@ -1,8 +1,6 @@
 ;; first simple example
 
-int i 0
-int a 0
-int b 0
+int i 0 int a 0 int b 0
 
 if i == 0
     a 1

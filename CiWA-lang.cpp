@@ -1,9 +1,7 @@
 ﻿// CiWA-lang.cpp: define o ponto de entrada para o aplicativo.
 //
 
-#include "CiWA-lang.h"
-#include <list>
-#include <regex>
+#include "./CiWA-lang.h"
 
 using namespace std;
 
@@ -80,7 +78,6 @@ int main()
 			}
 			
 			string word = strtok(StrToCharPointer(line), " ");
-
 			while (StrToCharPointer(word) != NULL) {
 				if (word[0] == ';' || word == "") { // if it's a comment line, just jump to the next one
 					break;
@@ -108,7 +105,6 @@ int main()
 					*op.OP_VALUE = (int)(*StrToCharPointer(word));
 
 					_Stack_.push_back(op);
-					break;
 				}
 
 				if (word == "int64") {
@@ -131,7 +127,6 @@ int main()
 					*op.OP_VALUE = (int)(*StrToCharPointer(word));
 
 					_Stack_.push_back(op);
-					break;
 				}
 				
 				if (word == "float32" || word == "float") {
@@ -154,7 +149,6 @@ int main()
 					*op.OP_VALUE = (float)(*StrToCharPointer(word));
 
 					_Stack_.push_back(op);
-					break;
 				}
 
 				if (word == "float64") {
@@ -177,7 +171,6 @@ int main()
 					*op.OP_VALUE = (double)(*StrToCharPointer(word));
 
 					_Stack_.push_back(op);
-					break;
 				}
 
 				if (word == "bool") {
@@ -200,7 +193,6 @@ int main()
 					*op.OP_VALUE = (bool)(*StrToCharPointer(word));
 
 					_Stack_.push_back(op);
-					break;
 				}
 
 				if (word == "char") {
@@ -224,7 +216,6 @@ int main()
 					*op.OP_VALUE = *StrToCharPointer(word);
 
 					_Stack_.push_back(op);
-					break;
 				}
 
 				if (word == "var") {
@@ -249,7 +240,6 @@ int main()
 					*op.OP_VALUE = *StrToCharPointer(word);
 
 					_Stack_.push_back(op);
-					break;
 				}
 
 				/*****************************************************/
@@ -328,8 +318,6 @@ int main()
 					ifop.OP_TYPE = __OP_IFSTART__;
 					ifop.OP_LABEL = StrToCharPointer("If");
 					_Stack_.push_back(ifop);
-
-					break;
 				}
 
 				if (word == "end") {
@@ -337,7 +325,6 @@ int main()
 					op.OP_TYPE = __OP_END__;
 					op.OP_LABEL = StrToCharPointer("End");
 					_Stack_.push_back(op);
-					break;
 				}
 
 				/*****************************************************/
@@ -377,10 +364,10 @@ int main()
 					}
 					varsetop.OP_VALUE = new char[sizeof(*varDefinition.OP_VALUE)];
 					*varsetop.OP_VALUE = *varDefinition.OP_VALUE;
-					break;
 				}
 				/*****************************************************/
 
+				word = strtok(StrToCharPointer(line), " ");
 			}
 
 			countLines++;
