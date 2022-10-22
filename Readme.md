@@ -46,7 +46,7 @@ end
 # Basic types:
 ### Integer:         int[x] : where [x] equals the number of bits    (ranging from 8 to 128 bits - standard 'int' is 32 bits of size)
 
-### Floating point:  float[x]: where [x] equals the number of bits   (ranging from 8 to 128 bits - standard 'int' is 32 bits of size)
+### Floating point:  float[x]: where [x] equals the number of bits   (ranging from 16 to 128 bits - standard 'int' is 32 bits of size)
 
 ### Boolean:         bool                                            (basic true or false)
 
