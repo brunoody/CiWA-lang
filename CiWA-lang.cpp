@@ -19,10 +19,16 @@ int IOTA(bool reset = false) {
 /*		CONSTANTS		*/
 
 /*	TYPE OPERATIONS	 */
-const short __OP_INT32PUSH__ =			IOTA(true);
+const short __OP_INT8PUSH__ =			IOTA(true);
+const short __OP_INT16PUSH__ =			IOTA();
+const short __OP_INT32PUSH__ =			IOTA();
 const short __OP_INT64PUSH__=			IOTA();
+const short __OP_INT128PUSH__=			IOTA();
+const short __OP_FLOAT8PUSH__ =			IOTA();
+const short __OP_FLOAT16PUSH__ =		IOTA();
 const short __OP_FLOAT32PUSH__ =		IOTA();
 const short __OP_FLOAT64PUSH__ =		IOTA();
+const short __OP_FLOAT128PUSH__ =		IOTA();
 const short __OP_BOOLEANPUSH__ =		IOTA();
 const short __OP_CHARACTERPUSH__ =		IOTA();
 const short __OP_VARPUSH__ =			IOTA();
@@ -95,7 +101,7 @@ int main()
 		string line = "";
 		//string word = "";
 		long countLines = 0;
-		list<operation> _Stack_; // initially 10000 operations, if more is needed, than it'll be expanded
+		list<operation> _Stack_; // the stack of programm operations
 
 		while (getline(file, line)) {
 			countLines++;
@@ -115,7 +121,51 @@ int main()
 
 				/*				---	TYPE PUSH ---				*/
 
-				if (word == "int32" || word == "int") {
+				if (word == "int8") {
+					operation op;
+					op.OP_TYPE = __OP_INT8PUSH__;
+
+					word = GetToken(line, ' '); // reads the variable's name
+					if (word == "") {
+						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected variable's name definition.\n";
+						exit(1);
+					}
+					op.OP_LABEL = StrToCharPointer(word);
+
+					word = GetToken(line, ' '); // reads the variable's value
+					if (word == "") {
+						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected variable's value definition.\n";
+						exit(1);
+					}
+					op.OP_VALUE = new char[1];
+					*op.OP_VALUE = *StrToCharPointer(word);
+
+					_Stack_.push_back(op);
+				}
+
+				else if (word == "int16") {
+					operation op;
+					op.OP_TYPE = __OP_INT16PUSH__;
+
+					word = GetToken(line, ' '); // reads the variable's name
+					if (word == "") {
+						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected variable's name definition.\n";
+						exit(1);
+					}
+					op.OP_LABEL = StrToCharPointer(word);
+
+					word = GetToken(line, ' '); // reads the variable's value
+					if (word == "") {
+						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected variable's value definition.\n";
+						exit(1);
+					}
+					op.OP_VALUE = new char[2];
+					*op.OP_VALUE = (short)(*StrToCharPointer(word));
+
+					_Stack_.push_back(op);
+				}
+
+				else if (word == "int32" || word == "int") {
 					operation op;
 					op.OP_TYPE = __OP_INT32PUSH__;
 					
@@ -154,7 +204,73 @@ int main()
 						exit(1);
 					}
 					op.OP_VALUE = new char[8];
-					*op.OP_VALUE = (int)(*StrToCharPointer(word));
+					*op.OP_VALUE = (long long)(*StrToCharPointer(word));
+
+					_Stack_.push_back(op);
+				}
+
+				else if (word == "int128") {
+					operation op;
+					op.OP_TYPE = __OP_INT128PUSH__;
+
+					word = GetToken(line, ' '); // reads the variable's name
+					if (word == "") {
+						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected variable's name definition.\n";
+						exit(1);
+					}
+					op.OP_LABEL = StrToCharPointer(word);
+
+					word = GetToken(line, ' '); // reads the variable's value
+					if (word == "") {
+						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected variable's value definition.\n";
+						exit(1);
+					}
+					op.OP_VALUE = new char[16];
+					*op.OP_VALUE = (long long)(*StrToCharPointer(word));
+
+					_Stack_.push_back(op);
+				}
+
+				else if (word == "float8") {
+					operation op;
+					op.OP_TYPE = __OP_FLOAT8PUSH__;
+
+					word = GetToken(line, ' '); // reads the variable's name
+					if (word == "") {
+						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected variable's name definition.\n";
+						exit(1);
+					}
+					op.OP_LABEL = StrToCharPointer(word);
+
+					word = GetToken(line, ' '); // reads the variable's value
+					if (word == "") {
+						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected variable's value definition.\n";
+						exit(1);
+					}
+					op.OP_VALUE = new char[1];
+					*op.OP_VALUE = (float)(*StrToCharPointer(word));
+
+					_Stack_.push_back(op);
+				}
+
+				else if (word == "float16") {
+					operation op;
+					op.OP_TYPE = __OP_FLOAT16PUSH__;
+
+					word = GetToken(line, ' '); // reads the variable's name
+					if (word == "") {
+						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected variable's name definition.\n";
+						exit(1);
+					}
+					op.OP_LABEL = StrToCharPointer(word);
+
+					word = GetToken(line, ' '); // reads the variable's value
+					if (word == "") {
+						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected variable's value definition.\n";
+						exit(1);
+					}
+					op.OP_VALUE = new char[2];
+					*op.OP_VALUE = (float)(*StrToCharPointer(word));
 
 					_Stack_.push_back(op);
 				}
@@ -198,7 +314,29 @@ int main()
 						exit(1);
 					}
 					op.OP_VALUE = new char[8];
-					*op.OP_VALUE = (double)(*StrToCharPointer(word));
+					*op.OP_VALUE = (long double)(*StrToCharPointer(word));
+
+					_Stack_.push_back(op);
+				}
+
+				else if (word == "float128") {
+					operation op;
+					op.OP_TYPE = __OP_FLOAT128PUSH__;
+
+					word = GetToken(line, ' '); // reads the variable's name
+					if (word == "") {
+						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected variable's name definition.\n";
+						exit(1);
+					}
+					op.OP_LABEL = StrToCharPointer(word);
+
+					word = GetToken(line, ' '); // reads the variable's value
+					if (word == "") {
+						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected variable's value definition.\n";
+						exit(1);
+					}
+					op.OP_VALUE = new char[16];
+					*op.OP_VALUE = (long double)(*StrToCharPointer(word));
 
 					_Stack_.push_back(op);
 				}
