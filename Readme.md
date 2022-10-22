@@ -47,13 +47,21 @@ end
 
 # Basic types:
 -- Integer:         int[x] : where [x] equals the number of bits    (ranging from 8 to 128 bits - standard 'int' is 32 bits of size)
+
 -- Floating point:  float[x]: where [x] equals the number of bits   (ranging from 8 to 128 bits - standard 'int' is 32 bits of size)
+
 -- Boolean:         bool                                            (basic true or false)
+
 -- Character:       char                                            (basic single character)
+
 -- Text:            string                                          (dynamic range text variable)
+
 -- Data Structure:  struct                                          (class-like structure that supports methods and attributes)
+
 -- Enumerator:      enum                                            (array-like data structure that stores a tuple (key, value) data for each position)
+
 -- Array/List:      array[type]                                     (stores [0:n] elements and the counter for the elements of the given type)
+
 -- Generic:         var                                             (a generic byte array that can store any kind of value - must be casted accordingly when read)
         PS.1: the generic 'var', when manipulated with arithmetic operands, will be treated as an Integer.
         PS.2: the generic 'var' is an actual pointer to an allocated dynamic range of memory, starting as 8 bytes of space.
