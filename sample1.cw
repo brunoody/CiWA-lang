@@ -8,4 +8,10 @@ elsif i > 0 ; else if it's greater then sets 'b'
     b 1
 end
 
+if a == 1
+    println "a is 1"
+elsif b == 1
+    println "b is 1"
+end
+
 ;; end of test #1

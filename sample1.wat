@@ -2,11 +2,11 @@
   (import "console" "log" (func $println (param i32)))
   
   (memory 1 1024)
-  (data (i32.const 0) "")
-  (data (i32.const 1) "code")
-  (data (i32.const 2) "...reached")
-  (data (i32.const 3) "...not reached")
-  (data (i32.const 4) "end of code...")
+  (data (offset (i32.const 0)) "")
+  (data (offset (i32.const 1)) "code")
+  (data (offset (i32.const 2)) "...reached")
+  (data (offset (i32.const 3)) "...not reached")
+  (data (offset (i32.const 4)) "end of code...")
 
   (func (export "main")
      (local $i i32)
