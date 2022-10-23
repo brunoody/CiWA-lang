@@ -29,7 +29,6 @@ const short __OP_FLOAT32PUSH__ =		IOTA();
 const short __OP_FLOAT64PUSH__ =		IOTA();
 const short __OP_FLOAT128PUSH__ =		IOTA();
 const short __OP_BOOLEANPUSH__ =		IOTA();
-const short __OP_CHARACTERPUSH__ =		IOTA();
 const short __OP_VARPUSH__ =			IOTA();
 const short __OP_VARPOP__ =				IOTA();
 const short __OP_CONSTDEF__ =			IOTA();
@@ -55,7 +54,6 @@ struct operation {
 	int	  OP_TYPE = -1;
 	char* OP_LABEL = 0; // the address label or typename for the WebAssembly code
 	char* OP_VALUE = 0; // can be any size of byte[], basically
-	long double OP_NUMBERVAL = 0.0;
 };
 
 /*		 GENERAL UTILS		*/
@@ -93,7 +91,7 @@ char* StrToCharPointer(string str) {
 	return ret;
 }
 
-long double StrToLongDouble(string str) {
+long double StrToLongDouble(string str, short shiftBits = 0) {
 	short pointIndex = 0;
 	for (int i = 0; i <= str.size(); i++) {
 		if (str[i] == '.') {
@@ -104,10 +102,41 @@ long double StrToLongDouble(string str) {
 	char* strIntPart = StrToCharPointer(str.substr(0, pointIndex));
 	char* strFloatPoints = StrToCharPointer(str.substr(pointIndex + 1, str.size()));
 
-	const long long intPart = stod(strIntPart);
-	const long double floatPart = stod(strFloatPoints)/ 10;
-	const long double ret = intPart + floatPart;
-	return ret;
+	long long longLongPart = stod(strIntPart);
+	longLongPart = longLongPart >> shiftBits;
+	long long floatPartAsLongLong = stod(strFloatPoints);
+	floatPartAsLongLong = floatPartAsLongLong >> shiftBits;
+	const long double floatPart = floatPartAsLongLong / 10.0;
+	return longLongPart + floatPart;
+}
+
+string GetVarchar(string line, string token) {
+	char toCheck = '\0';
+	short start, countChars = -1;
+
+	if (token[0] == '"') {
+		toCheck = '"';
+	}
+	else if (token[0] == '\'') {
+		toCheck = '\'';
+	}
+
+	if (toCheck != '\0') {
+		start = line.find(token);
+		countChars = start + 1;
+		char temp = '\0';
+		do {
+			temp = line[countChars];
+			countChars++;
+			if (temp == toCheck) {
+				break;
+			}
+		} while (temp != toCheck);
+		itIndex += countChars-start-2;
+		return line.substr(start+1, countChars-start-2);
+	}
+
+	return "";
 }
 
 /*		 OPERATION UTILS		*/
@@ -127,34 +156,38 @@ operation OpPush(string line, string word, long lineNumber, short OP_TYPE, short
 		cout << "--- syntax error in line (" << lineNumber << "): '" << line << "'; <-- expected variable's value definition.\n";
 		exit(1);
 	}
-	op.OP_VALUE = new char[memSize];
 
-	if ( // all integer numbers casted to be sure of value
-		OP_TYPE == __OP_INT8PUSH__ ||
-		OP_TYPE == __OP_INT16PUSH__ ||
-		OP_TYPE == __OP_INT32PUSH__ ||
-		OP_TYPE == __OP_INT64PUSH__ ||
-		OP_TYPE == __OP_INT128PUSH__
-	) {
-		op.OP_NUMBERVAL = (long long)stod(word);
-		*op.OP_VALUE = (long long)stod(word);
+	if (word[0] == '"' || word[0] == '\'') { // strings and character values
+		word = GetVarchar(line, word);
+		op.OP_VALUE = StrToCharPointer(word);
 	}
-	else if ( // all floating point numbers casted to be sure of value
-		OP_TYPE == __OP_FLOAT16PUSH__ ||
-		OP_TYPE == __OP_FLOAT32PUSH__ ||
-		OP_TYPE == __OP_FLOAT64PUSH__ ||
-		OP_TYPE == __OP_FLOAT128PUSH__
+	else {
+		if ( // all integer numbers casted to be sure of value
+			OP_TYPE == __OP_INT8PUSH__ ||
+			OP_TYPE == __OP_INT16PUSH__ ||
+			OP_TYPE == __OP_INT32PUSH__ ||
+			OP_TYPE == __OP_INT64PUSH__ ||
+			OP_TYPE == __OP_INT128PUSH__
 		) {
-		// TODO : create a function to convert string to long double size - std::stod doesn't do the job properly
-		op.OP_NUMBERVAL = StrToLongDouble(word);
-		*op.OP_VALUE = StrToLongDouble(word);
-	}
-	else if (OP_TYPE == __OP_BOOLEANPUSH__) {
-		*op.OP_VALUE = (bool)(*StrToCharPointer(word));
-	}
-	else { // otherwise there's no casting to do
-		// TODO : check for floating point numbers here - preferably not use 'var' for floating point numbers (possible loss of data)
-		*op.OP_VALUE = *StrToCharPointer(word);
+			op.OP_VALUE = (char*)malloc(memSize);
+			*op.OP_VALUE = (long long)stod(word);
+		}
+		else if ( // all floating point numbers casted to be sure of value
+			OP_TYPE == __OP_FLOAT16PUSH__ ||
+			OP_TYPE == __OP_FLOAT32PUSH__ ||
+			OP_TYPE == __OP_FLOAT64PUSH__ ||
+			OP_TYPE == __OP_FLOAT128PUSH__
+		) {
+			op.OP_VALUE = (char*)malloc(memSize);
+			*op.OP_VALUE = StrToLongDouble(word);
+		}
+		else if (OP_TYPE == __OP_BOOLEANPUSH__) {
+			op.OP_VALUE = new char[1];
+			op.OP_VALUE[0] = word == "true" || stod(word) > 0 ? 1 : 0;
+		}
+		else { // generic 'var', but not char nor string
+			op.OP_VALUE = StrToCharPointer(word);
+		}
 	}
 
 	return op;
@@ -164,7 +197,7 @@ operation OpPush(string line, string word, long lineNumber, short OP_TYPE, short
 int main()
 {
 	const regex r("((\\+|-)?[[:d:]]+)(\\.(([[:d:]]+)?))?");
-	fstream file("../../../sample2-multiple_types.cw", ios::in); // ios::out | ios::trunc | ios::app
+	fstream file("../../../sample1.cw", ios::in); // ios::out | ios::trunc | ios::app
 
 	if (file.is_open()) {
 		string line = "";
@@ -240,16 +273,8 @@ int main()
 					_Stack_.push_back(op);
 				}
 
-				else if (word == "char") {
-					// TODO : check for " and ' for char and string
-					operation op = OpPush(line, word, countLines, __OP_CHARACTERPUSH__, 1);
-					_Stack_.push_back(op);
-				}
-
 				else if (word == "var") {
-					// TODO : check for " and ' for char and string
-					// since 'var' is a generic type, it can receive attribution with those
-					operation op = OpPush(line, word, countLines, __OP_VARPUSH__, sizeof(*StrToCharPointer(word)));
+					operation op = OpPush(line, word, countLines, __OP_VARPUSH__, word.size());
 					_Stack_.push_back(op);
 				}
 
@@ -266,6 +291,7 @@ int main()
 						exit(1);
 					}
 					popop.OP_LABEL = StrToCharPointer(word);
+					popop.OP_VALUE = StrToCharPointer(word);
 					_Stack_.push_back(popop);
 
 					operation condop;
@@ -279,26 +305,32 @@ int main()
 					if (word == "==") {
 						condop.OP_TYPE = __OP_EQUALS__;
 						condop.OP_LABEL = StrToCharPointer("eq");
+						condop.OP_VALUE = StrToCharPointer("eq");
 					}
 					else if (word == "!=") {
 						condop.OP_TYPE = __OP_NOTEQUALS__;
 						condop.OP_LABEL = StrToCharPointer("ne");
+						condop.OP_VALUE = StrToCharPointer("ne");
 					}
 					else if (word == ">") {
 						condop.OP_TYPE = __OP_GREATER__;
 						condop.OP_LABEL = StrToCharPointer("gt");
+						condop.OP_VALUE = StrToCharPointer("gt");
 					}
 					else if (word == ">=") {
 						condop.OP_TYPE = __OP_GREATEROREQUAL__;
 						condop.OP_LABEL = StrToCharPointer("ge");
+						condop.OP_VALUE = StrToCharPointer("ge");
 					}
 					else if (word == "<") {
 						condop.OP_TYPE = __OP_LESS__;
 						condop.OP_LABEL = StrToCharPointer("lt");
+						condop.OP_VALUE = StrToCharPointer("lt");
 					}
 					else if (word == "<=") {
 						condop.OP_TYPE = __OP_LESSOREQUAL__;
 						condop.OP_LABEL = StrToCharPointer("le");
+						condop.OP_VALUE = StrToCharPointer("le");
 					}
 					else {
 						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- invalid conditional operation.\n";
@@ -314,7 +346,8 @@ int main()
 					// defines if it is a number or a variable's name
 					if (regex_match(word, r)) {
 						poporconstop.OP_TYPE = __OP_CONSTDEF__;
-						poporconstop.OP_VALUE = StrToCharPointer(word); // the const value is set
+						poporconstop.OP_LABEL = StrToCharPointer("Const");
+;						poporconstop.OP_VALUE = StrToCharPointer(word); // the const value is set
 					}
 					else {
 						poporconstop.OP_TYPE = __OP_VARPOP__;
@@ -328,6 +361,7 @@ int main()
 					operation ifop;
 					ifop.OP_TYPE = __OP_IFSTART__;
 					ifop.OP_LABEL = StrToCharPointer("If");
+					ifop.OP_VALUE = StrToCharPointer("If");
 					_Stack_.push_back(ifop);
 				}
 
@@ -335,6 +369,7 @@ int main()
 					operation op;
 					op.OP_TYPE = __OP_END__;
 					op.OP_LABEL = StrToCharPointer("End");
+					op.OP_VALUE = StrToCharPointer("End");
 					_Stack_.push_back(op);
 				}
 
@@ -343,11 +378,13 @@ int main()
 					operation op;
 					op.OP_TYPE = __OP_END__;
 					op.OP_LABEL = StrToCharPointer("End");
+					op.OP_VALUE= StrToCharPointer("End");
 					_Stack_.push_back(op);
 
 					operation elseop;
 					elseop.OP_TYPE = __OP_ELSE__;
 					elseop.OP_LABEL = StrToCharPointer("Else");
+					elseop.OP_VALUE = StrToCharPointer("Else");
 					_Stack_.push_back(elseop);
 				}
 
@@ -356,6 +393,7 @@ int main()
 					operation op;
 					op.OP_TYPE = __OP_END__;
 					op.OP_LABEL = StrToCharPointer("End");
+					op.OP_VALUE = StrToCharPointer("End");
 					_Stack_.push_back(op);
 
 					// then creates a new If-like operations sequence
@@ -367,6 +405,7 @@ int main()
 						exit(1);
 					}
 					popop.OP_LABEL = StrToCharPointer(word);
+					popop.OP_VALUE = StrToCharPointer(word);
 					_Stack_.push_back(popop);
 
 					operation condop;
@@ -380,26 +419,32 @@ int main()
 					if (word == "==") {
 						condop.OP_TYPE = __OP_EQUALS__;
 						condop.OP_LABEL = StrToCharPointer("eq");
+						condop.OP_VALUE = StrToCharPointer("eq");
 					}
 					else if (word == "!=") {
 						condop.OP_TYPE = __OP_NOTEQUALS__;
 						condop.OP_LABEL = StrToCharPointer("ne");
+						condop.OP_VALUE = StrToCharPointer("ne");
 					}
 					else if (word == ">") {
 						condop.OP_TYPE = __OP_GREATER__;
 						condop.OP_LABEL = StrToCharPointer("gt");
+						condop.OP_VALUE = StrToCharPointer("gt");
 					}
 					else if (word == ">=") {
 						condop.OP_TYPE = __OP_GREATEROREQUAL__;
 						condop.OP_LABEL = StrToCharPointer("ge");
+						condop.OP_VALUE = StrToCharPointer("ge");
 					}
 					else if (word == "<") {
 						condop.OP_TYPE = __OP_LESS__;
 						condop.OP_LABEL = StrToCharPointer("lt");
+						condop.OP_VALUE = StrToCharPointer("lt");
 					}
 					else if (word == "<=") {
 						condop.OP_TYPE = __OP_LESSOREQUAL__;
 						condop.OP_LABEL = StrToCharPointer("le");
+						condop.OP_VALUE = StrToCharPointer("le");
 					}
 					else {
 						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- invalid conditional operation.\n";
@@ -415,6 +460,7 @@ int main()
 					// defines if it is a number or a variable's name
 					if (regex_match(word, r)) {
 						poporconstop.OP_TYPE = __OP_CONSTDEF__;
+						poporconstop.OP_LABEL = StrToCharPointer("Const");
 						poporconstop.OP_VALUE = StrToCharPointer(word); // the const value is set
 					}
 					else {
@@ -429,6 +475,7 @@ int main()
 					operation ifop;
 					ifop.OP_TYPE = __OP_IFSTART__;
 					ifop.OP_LABEL = StrToCharPointer("If");
+					ifop.OP_VALUE = StrToCharPointer("If");
 					_Stack_.push_back(ifop);
 				}
 
@@ -460,15 +507,17 @@ int main()
 
 					operation varsetop;
 					varsetop.OP_TYPE = __OP_VARSETVAL__;
-					varsetop.OP_LABEL = varDefinition.OP_LABEL;
+					string label = varDefinition.OP_LABEL;
+					varsetop.OP_LABEL = StrToCharPointer(label);
 
 					word = GetToken(line, ' '); // reads the value to reset
 					if (word == "") {
 						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected value to be set on variable '" << varsetop.OP_LABEL << "'.\n";
 						exit(1);
 					}
-					varsetop.OP_VALUE = new char[sizeof(*varDefinition.OP_VALUE)];
-					*varsetop.OP_VALUE = *varDefinition.OP_VALUE;
+					string val = varDefinition.OP_VALUE;
+					varsetop.OP_VALUE = (char*)malloc(val.size());
+					varsetop.OP_VALUE = StrToCharPointer(val);
 				}
 				/*****************************************************/
 
@@ -488,6 +537,15 @@ int main()
 					word = GetToken(line, ' ');
 				}
 			}
+		}
+
+		cout << "Stack: \n\n";
+		int count = 0;
+		_Stack_.begin();
+		while(_Stack_.size()) {
+			operation op = _Stack_.front();
+			cout << "   #" << count++ << "   OP_TYPE = " << op.OP_TYPE << "   OP_LABEL = " << op.OP_LABEL << "   OP_VALUE = " << op.OP_VALUE << "\n\n";
+			_Stack_.pop_front();
 		}
 		
 		file.close();

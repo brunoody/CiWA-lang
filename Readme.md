@@ -1,8 +1,11 @@
-# CiWA: a stack-based programming language made to be simple and compile to wasm.
+# CiWA: a concatenative programming language made to be simple and to compile to WebAssembly.
 -- The language follows the syntatic aspects of Python and Pascal, joining with arrow-function-like syntax from JavaScript/TypeScript.
-    It also features basic types such as Integer, Boolean and String, but including a generic type variable (var). It was originally written through C - thus being called CiWA - and compiled directly to wasm.
+    It also features basic types such as Integer, Boolean and Float, but including a generic type variable (var). 
+    It was originally written through C - thus being called CiWA - and compiled directly to wasm.
     
--- There are two basic ways of syntax writting: 1. with arrow-function-like code after a condition or loop (which means inline code, working only for a single command), or 2. with the use of the special word 'end' to finish the block.
+-- There are two basic ways of syntax writting:
+    1. with arrow-function-like code after a condition or loop (which means inline code, working only for a single command), or
+    2. with the use of the special word 'end' to finish the block.
 
 # Some syntax basic examples:
 ## With arrow-function-like (a block of a single command):
@@ -50,10 +53,6 @@ end
 
 ### Boolean:         bool                                            (basic true or false)
 
-### Character:       char                                            (basic single character)
-
-### Text:            string                                          (dynamic range text variable)
-
 ### Data Structure:  struct                                          (class-like structure that supports methods and attributes)
 
 ### Enumerator:      enum                                            (array-like data structure that stores a tuple (key, value) data for each position)
@@ -61,9 +60,10 @@ end
 ### Array/List:      array[type]                                     (stores [0:n] elements and the counter for the elements of the given type)
 
 ### Generic:         var                                             (a generic byte array that can store any kind of value - must be casted accordingly when read)
-        PS.1: the generic 'var', when manipulated with arithmetic operands, will be treated as an Integer.
-        PS.2: the generic 'var' is an actual pointer to an allocated dynamic range of memory, starting as 8 bytes of space.
-        PS.3: reminder about bytes and sizes -> 2^1byte = 2^8 = 256 bytes ; 2^8bytes = 2^64 = 17.179.869.184 Gigabytes
+        PS.1: 'var' can be used to store Text values and there's no difference between char and string, or such.
+        PS.2: the generic 'var', when manipulated with arithmetic operands, will be treated as an Integer.
+        PS.3: the generic 'var' is an actual pointer to an allocated dynamic range of memory.
+        PS.4: reminder about bytes and sizes -> 2^1byte = 2^8 = 256 bytes ; 2^8bytes = 2^64 = 17.179.869.184 Gigabytes.
 
 # Functions:
 ### Accepts [0:n] parameters with given types (or var, which has to be casted when read) and may or may not return a value (without the need of specification).
