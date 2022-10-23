@@ -58,6 +58,7 @@ typedef struct operation {
 	int	  OP_TYPE = -1;
 	char* OP_LABEL = 0; // the address label or typename for the WebAssembly code
 	char* OP_VALUE = 0; // can be any size of byte[], basically
+	bool  OP_TEXTFLAG = false; // defines if it's a text variable
 };
 
 typedef union t_int8 {
@@ -237,6 +238,7 @@ operation OpPush(string line, string word, long lineNumber, short OP_TYPE, short
 	if (word[0] == '"' || word[0] == '\'') { // generic 'var', strings and character values
 		word = GetVarchar(line, word);
 		op.OP_VALUE = StrToCharPointer(word);
+		op.OP_TEXTFLAG = true;
 	}
 	else {
 		if (OP_TYPE == __OP_BOOLEANPUSH__) {
@@ -246,9 +248,9 @@ operation OpPush(string line, string word, long lineNumber, short OP_TYPE, short
 		else if (OP_TYPE == __OP_VARPUSH__) { // generic 'var', but not char nor string
 			op.OP_VALUE = StrToCharPointer(word);
 		}
-		else { // else: it''s a number value
+		else { // otherwise, it's a number value
 
-			// TODO: 128bit support isn't quite good as proposed initually, needs refinement
+			// TODO: 128bit support isn't quite good as proposed initially, needs refinement
 			op.OP_VALUE = (char*)malloc(memSize);
 
 			// INTEGER
@@ -309,6 +311,7 @@ operation OpPush(string line, string word, long lineNumber, short OP_TYPE, short
 /*		 MAIN PROGRAM		*/
 int main()
 {
+	bool printStack = false;
 	const regex r("((\\+|-)?[[:d:]]+)(\\.(([[:d:]]+)?))?");
 	fstream file("../../../sample2-multiple_types.cw", ios::in); // ios::out | ios::trunc | ios::app
 
@@ -652,14 +655,16 @@ int main()
 			}
 		}
 
-		cout << "Stack: \n\n";
-		int count = 0;
-		_Stack_.begin();
-		while(_Stack_.size()) {
-			operation op = _Stack_.front();
-			cout << "   #" << count++ << "   OP_TYPE = " << op.OP_TYPE << "   OP_LABEL = " << op.OP_LABEL;
-			cout << "   OP_VALUE = " << op.OP_VALUE << "\n\n";
-			_Stack_.pop_front();
+		if (printStack) {
+			cout << "Stack: \n\n";
+			int count = 0;
+			_Stack_.begin();
+			while(_Stack_.size()) {
+				operation op = _Stack_.front();
+				cout << "   #" << count++ << "   OP_TYPE = " << op.OP_TYPE << "   OP_LABEL = " << op.OP_LABEL;
+				cout << "   OP_VALUE = " << op.OP_VALUE << "\n\n";
+				_Stack_.pop_front();
+			}
 		}
 		
 		file.close();
