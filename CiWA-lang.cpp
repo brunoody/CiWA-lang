@@ -1,10 +1,11 @@
-﻿// CiWA-lang.cpp: define o ponto de entrada para o aplicativo.
+﻿//
+// CiWA-lang.cpp: Main file
 //
 
 #include "./CiWA-lang.h"
-
 using namespace std;
 
+/*		ENUMERATION FUNC      */
 int iota = 0;
 int IOTA(bool reset = false) {
 	if (reset) {
@@ -15,6 +16,7 @@ int IOTA(bool reset = false) {
 	}
 	return iota;
 }
+/***************************************/
 
 /*		CONSTANTS		*/
 
@@ -50,11 +52,67 @@ const short __OP_LESSOREQUAL__ =		IOTA();
 
 /***************************************/
 
-struct operation {
+/*	 TYPE DEFINITIONS	*/
+
+typedef struct operation {
 	int	  OP_TYPE = -1;
 	char* OP_LABEL = 0; // the address label or typename for the WebAssembly code
 	char* OP_VALUE = 0; // can be any size of byte[], basically
 };
+
+typedef union t_int8 {
+	short i;
+	char c;
+};
+
+typedef union t_int16 {
+	short i;
+	char c[2];
+};
+
+typedef union t_int32 {
+	int i;
+	char c[4];
+};
+
+typedef union t_int64 {
+	long i;
+	char c[8];
+};
+
+typedef union t_int128 {
+	long long i;
+	char c[16];
+};
+
+typedef struct float_parsed {
+	string intPart = "";
+	string floatPart = "";
+};
+
+typedef union t_float16 {
+	float f;
+	char c[2];
+};
+
+typedef union t_float32{
+	float f;
+	char c[4];
+};
+
+typedef union t_float64 {
+	double f;
+	char c[8];
+};
+
+typedef union t_float128 {
+	long double f;
+	char c[16];
+};
+
+/***************************************/
+
+/*			UTILLS			*/
 
 /*		 GENERAL UTILS		*/
 unsigned long itIndex = 0;
@@ -84,14 +142,22 @@ string GetToken(string str, char delim, bool resetItIndex = false) {
 	return ret;
 }
 
-char* StrToCharPointer(string str) {
-	char* ret = new char[str.size() + 1];
-	copy(str.begin(), str.end(), ret);
-	ret[str.size()] = '\0'; // 'end char'
+char* StrToCharPointer(string str, bool addNullChar = true) {
+	char* ret = 0;
+	if (addNullChar) {
+		ret = new char[str.size() + 1];
+		copy(str.begin(), str.end(), ret);
+		ret[str.size()] = '\0'; // 'end char'
+	}
+	else {
+		ret = new char[str.size()];
+		copy(str.begin(), str.end(), ret);
+	}
 	return ret;
 }
 
-long double StrToLongDouble(string str, short shiftBits = 0) {
+short floatPoints = 0;
+float_parsed ParseFloat(string str) {
 	short pointIndex = 0;
 	for (int i = 0; i <= str.size(); i++) {
 		if (str[i] == '.') {
@@ -99,15 +165,26 @@ long double StrToLongDouble(string str, short shiftBits = 0) {
 			break;
 		}
 	}
-	char* strIntPart = StrToCharPointer(str.substr(0, pointIndex));
-	char* strFloatPoints = StrToCharPointer(str.substr(pointIndex + 1, str.size()));
+	floatPoints = str.size() - pointIndex - 1;
+	float_parsed parse;
+	parse.intPart = str.substr(0, pointIndex);
+	parse.floatPart = str.substr(pointIndex + 1, str.size());
+	return parse;
+}
 
-	long long longLongPart = stod(strIntPart);
-	longLongPart = longLongPart >> shiftBits;
-	long long floatPartAsLongLong = stod(strFloatPoints);
-	floatPartAsLongLong = floatPartAsLongLong >> shiftBits;
-	const long double floatPart = floatPartAsLongLong / 10.0;
-	return longLongPart + floatPart;
+long double StrToLongDouble(string str, short shiftBits = 0) {
+	long long longLongPart = stod(ParseFloat(str).intPart);
+	long long floatPartAsLongLong = stod(ParseFloat(str).floatPart);
+	if (shiftBits > 0) {
+		longLongPart = longLongPart >> shiftBits & 0xFF;
+		floatPartAsLongLong = floatPartAsLongLong >> shiftBits & 0xFF;
+	}
+	float divisor = 10.0;
+	for (int i = 1; i < floatPoints; i++) {
+		divisor = divisor * 10.0;
+	}
+	const long double doublePart = floatPartAsLongLong / divisor;
+	return longLongPart + doublePart;
 }
 
 string GetVarchar(string line, string token) {
@@ -157,47 +234,83 @@ operation OpPush(string line, string word, long lineNumber, short OP_TYPE, short
 		exit(1);
 	}
 
-	if (word[0] == '"' || word[0] == '\'') { // strings and character values
+	if (word[0] == '"' || word[0] == '\'') { // generic 'var', strings and character values
 		word = GetVarchar(line, word);
 		op.OP_VALUE = StrToCharPointer(word);
 	}
 	else {
-		if ( // all integer numbers casted to be sure of value
-			OP_TYPE == __OP_INT8PUSH__ ||
-			OP_TYPE == __OP_INT16PUSH__ ||
-			OP_TYPE == __OP_INT32PUSH__ ||
-			OP_TYPE == __OP_INT64PUSH__ ||
-			OP_TYPE == __OP_INT128PUSH__
-		) {
-			op.OP_VALUE = (char*)malloc(memSize);
-			*op.OP_VALUE = (long long)stod(word);
-		}
-		else if ( // all floating point numbers casted to be sure of value
-			OP_TYPE == __OP_FLOAT16PUSH__ ||
-			OP_TYPE == __OP_FLOAT32PUSH__ ||
-			OP_TYPE == __OP_FLOAT64PUSH__ ||
-			OP_TYPE == __OP_FLOAT128PUSH__
-		) {
-			op.OP_VALUE = (char*)malloc(memSize);
-			*op.OP_VALUE = StrToLongDouble(word);
-		}
-		else if (OP_TYPE == __OP_BOOLEANPUSH__) {
+		if (OP_TYPE == __OP_BOOLEANPUSH__) {
 			op.OP_VALUE = new char[1];
 			op.OP_VALUE[0] = word == "true" || stod(word) > 0 ? 1 : 0;
 		}
-		else { // generic 'var', but not char nor string
+		else if (OP_TYPE == __OP_VARPUSH__) { // generic 'var', but not char nor string
 			op.OP_VALUE = StrToCharPointer(word);
+		}
+		else { // else: it''s a number value
+
+			// TODO: 128bit support isn't quite good as proposed initually, needs refinement
+			op.OP_VALUE = (char*)malloc(memSize);
+
+			// INTEGER
+			if (OP_TYPE == __OP_INT8PUSH__) {
+				t_int8 int8;
+				int8.i = (short)stod(word);
+				*op.OP_VALUE = int8.c;
+			}
+			else if (OP_TYPE == __OP_INT16PUSH__) {
+				t_int16 int16;
+				int16.i = (short)stod(word);
+				op.OP_VALUE = int16.c;
+			}
+			else if (OP_TYPE == __OP_INT32PUSH__) {
+				t_int32 int32;
+				int32.i = (int)stod(word);
+				op.OP_VALUE = int32.c;
+			}
+			else if (OP_TYPE == __OP_INT64PUSH__) {
+				t_int64 int64;
+				int64.i = (long)stod(word);
+				op.OP_VALUE = int64.c;
+			}
+			else if (OP_TYPE == __OP_INT128PUSH__) {
+				t_int128 int128;
+				int128.i = (long long)stod(word);
+				op.OP_VALUE = int128.c;
+			}
+			// FLOAT
+			else if (OP_TYPE == __OP_FLOAT16PUSH__) {
+				t_float16 float16;
+				float16.f = (float)StrToLongDouble(word);
+				op.OP_VALUE = float16.c;
+			}
+			else if (OP_TYPE == __OP_FLOAT32PUSH__) {
+				t_float32 float32;
+				float32.f = (float)StrToLongDouble(word);
+				op.OP_VALUE = float32.c;
+			}
+			else if (OP_TYPE == __OP_FLOAT64PUSH__) {
+				t_float64 float64;
+				float64.f = (double)StrToLongDouble(word);
+				op.OP_VALUE = float64.c;
+			}
+			else if (OP_TYPE == __OP_FLOAT128PUSH__) {
+				t_float128 float128;
+				float128.f = StrToLongDouble(word);
+				op.OP_VALUE = float128.c;
+			}
 		}
 	}
 
 	return op;
 }
 
+/***************************************/
+
 /*		 MAIN PROGRAM		*/
 int main()
 {
 	const regex r("((\\+|-)?[[:d:]]+)(\\.(([[:d:]]+)?))?");
-	fstream file("../../../sample1.cw", ios::in); // ios::out | ios::trunc | ios::app
+	fstream file("../../../sample2-multiple_types.cw", ios::in); // ios::out | ios::trunc | ios::app
 
 	if (file.is_open()) {
 		string line = "";
@@ -263,10 +376,10 @@ int main()
 					_Stack_.push_back(op);
 				}
 
-				/*else if (word == "float128") {
+				else if (word == "float128") {
 					operation op = OpPush(line, word, countLines, __OP_FLOAT128PUSH__, 16);
 					_Stack_.push_back(op);
-				}*/
+				}
 
 				else if (word == "bool") {
 					operation op = OpPush(line, word, countLines, __OP_BOOLEANPUSH__, 1);
@@ -544,7 +657,8 @@ int main()
 		_Stack_.begin();
 		while(_Stack_.size()) {
 			operation op = _Stack_.front();
-			cout << "   #" << count++ << "   OP_TYPE = " << op.OP_TYPE << "   OP_LABEL = " << op.OP_LABEL << "   OP_VALUE = " << op.OP_VALUE << "\n\n";
+			cout << "   #" << count++ << "   OP_TYPE = " << op.OP_TYPE << "   OP_LABEL = " << op.OP_LABEL;
+			cout << "   OP_VALUE = " << op.OP_VALUE << "\n\n";
 			_Stack_.pop_front();
 		}
 		
