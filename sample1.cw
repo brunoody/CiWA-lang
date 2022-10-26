@@ -9,7 +9,8 @@ elsif i > 0 ; else if it's greater then sets 'b'
 end
 
 if a == 1
-    println "a is 1"
+    a "a is 1" ; var int to generic reattribution
+    println a
 elsif b == 1
     println "b is 1"
 end
