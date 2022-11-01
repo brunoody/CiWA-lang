@@ -224,7 +224,7 @@ string GetVarchar(string line, string token) {
 }
 
 /*		 OPERATION UTILS		*/
-operation OpPush(string line, string word, long lineNumber, short OP_TYPE, short memSize) {
+operation OpPush(string line, string word, long lineNumber, short OP_TYPE) {
 	operation op;
 	op.OP_TYPE = OP_TYPE;
 
@@ -261,10 +261,9 @@ operation OpPush(string line, string word, long lineNumber, short OP_TYPE, short
 		else { // otherwise, it's a number value
 
 			// TODO: 128bit support isn't quite good as proposed initially, needs refinement
-			op.OP_VALUE = (char*)malloc(memSize);
-
 			// INTEGER
 			if (OP_TYPE == __OP_INT8PUSH__) {
+				op.OP_VALUE = (char*)malloc(1);
 				t_int8 int8;
 				int8.i = (short)stod(word);
 				*op.OP_VALUE = int8.c;
@@ -433,57 +432,57 @@ int main()
 				/*				---	TYPE PUSH ---				*/
 
 				if (word == "int8") {
-					operation op = OpPush(line, word, countLines, __OP_INT8PUSH__, 1);
+					operation op = OpPush(line, word, countLines, __OP_INT8PUSH__);
 					_Stack_.push_back(op);
 				}
 
 				else if (word == "int16") {
-					operation op = OpPush(line, word, countLines, __OP_INT16PUSH__, 2);
+					operation op = OpPush(line, word, countLines, __OP_INT16PUSH__);
 					_Stack_.push_back(op);
 				}
 
 				else if (word == "int32" || word == "int") {
-					operation op = OpPush(line, word, countLines, __OP_INT32PUSH__, 4);
+					operation op = OpPush(line, word, countLines, __OP_INT32PUSH__);
 					_Stack_.push_back(op);
 				}
 
 				else if (word == "int64") {
-					operation op = OpPush(line, word, countLines, __OP_INT64PUSH__, 8);
+					operation op = OpPush(line, word, countLines, __OP_INT64PUSH__);
 					_Stack_.push_back(op);
 				}
 
 				else if (word == "int128") {
-					operation op = OpPush(line, word, countLines, __OP_INT128PUSH__, 16);
+					operation op = OpPush(line, word, countLines, __OP_INT128PUSH__);
 					_Stack_.push_back(op);
 				}
 
 				else if (word == "float16") {
-					operation op = OpPush(line, word, countLines, __OP_FLOAT16PUSH__, 2);
+					operation op = OpPush(line, word, countLines, __OP_FLOAT16PUSH__);
 					_Stack_.push_back(op);
 				}
 				
 				else if (word == "float32" || word == "float") {
-					operation op = OpPush(line, word, countLines, __OP_FLOAT32PUSH__, 4);
+					operation op = OpPush(line, word, countLines, __OP_FLOAT32PUSH__);
 					_Stack_.push_back(op);
 				}
 
 				else if (word == "float64") {
-					operation op = OpPush(line, word, countLines, __OP_FLOAT64PUSH__, 8);
+					operation op = OpPush(line, word, countLines, __OP_FLOAT64PUSH__);
 					_Stack_.push_back(op);
 				}
 
 				else if (word == "float128") {
-					operation op = OpPush(line, word, countLines, __OP_FLOAT128PUSH__, 16);
+					operation op = OpPush(line, word, countLines, __OP_FLOAT128PUSH__);
 					_Stack_.push_back(op);
 				}
 
 				else if (word == "bool") {
-					operation op = OpPush(line, word, countLines, __OP_BOOLEANPUSH__, 1);
+					operation op = OpPush(line, word, countLines, __OP_BOOLEANPUSH__);
 					_Stack_.push_back(op);
 				}
 
 				else if (word == "var") {
-					operation op = OpPush(line, word, countLines, __OP_VARPUSH__, word.size());
+					operation op = OpPush(line, word, countLines, __OP_VARPUSH__);
 					_Stack_.push_back(op);
 				}
 
@@ -504,13 +503,7 @@ int main()
 				}
 
 				else if (word == "else") {
-					// firstly closes the block before
-					operation op;
-					op.OP_TYPE = __OP_END__;
-					op.OP_LABEL = StrToCharPointer("End");
-					op.OP_VALUE= StrToCharPointer("End");
-					_Stack_.push_back(op);
-
+					// Else-statements don't close the If-statements before them, but they must close the Then-blocks
 					operation elseop;
 					elseop.OP_TYPE = __OP_ELSE__;
 					elseop.OP_LABEL = StrToCharPointer("Else");
@@ -598,17 +591,96 @@ int main()
 						exit(1);
 					}
 
-					if (word[0] == '"' || word[0] == '\'') { // generic 'var', strings and character values
-						word = GetVarchar(line, word);
-						if (word == "") {
-							cout << "--- syntax error in line (" << countLines << "): '" << line << "'; <-- text variable unclosed.\n";
+					// tests if it's either a generic var reattribution or another type
+					if (varDefinition.OP_TYPE == __OP_VARPUSH__) { // generic 'var', any value or type accepted
+						if (word[0] == '"' || word[0] == '\'') { // if it's a text value...
+							word = GetVarchar(line, word);
+							if (word == "") {
+								cout << "--- syntax error in line (" << countLines << "): '" << line << "'; <-- text variable unclosed.\n";
+								exit(1);
+							}
+							varsetop.OP_VALUE = StrToCharPointer(word);
+							varsetop.OP_TEXTFLAG = true;		// forces the var to be a text one, if it wasn't
+						}
+						else if (word == "true" || word == "false" || word == "null") { // for either boolean values or nullables
+							varsetop.OP_VALUE = new char[1];
+							*varsetop.OP_VALUE = word == "true" ? 1 : 0;
+							varsetop.OP_TEXTFLAG = false;		// forces the var to not be a text one, if it was
+						}
+						else {
+							varsetop.OP_VALUE = StrToCharPointer(word);
+							varsetop.OP_TEXTFLAG = false;		// forces the var to not be a text one, if it was
+						}
+					}
+					else { // other types have to be reattributed accordingly
+						if (word[0] == '"' || word[0] == '\'') { // if it is a generic 'var' when reattributing to another type...
+							cout << "--- compilation error in line (" << countLines << "): '" << line << "'; <-- type mismatch on reset variable '" << varDefinition.OP_LABEL << "'.\n";
 							exit(1);
 						}
-						varsetop.OP_VALUE = StrToCharPointer(word);
-						varsetop.OP_TEXTFLAG = true;		// forces the var to be a generic, if it wasn't
-					}
-					else {
-						varsetop.OP_VALUE = StrToCharPointer(word);
+						varsetop.OP_TEXTFLAG = false; // forces the variable to not be a text one
+
+						if (varDefinition.OP_TYPE == __OP_BOOLEANPUSH__) { // forces any number to boolean
+							varsetop.OP_VALUE = new char[1];
+							*varsetop.OP_VALUE = stod(word) > 0 ? 1 : 0;
+						}
+
+						// NUMBER REATTRIBUTIONS
+						else {
+							// TODO: 128bit support isn't quite good as proposed initially, needs refinement
+							// INTEGER
+							if (varDefinition.OP_TYPE == __OP_INT8PUSH__) {
+								varsetop.OP_VALUE = (char*)malloc(1);
+								t_int8 int8;
+								int8.i = (short)stod(word);
+								*varsetop.OP_VALUE = int8.c;
+							}
+							else if (varDefinition.OP_TYPE == __OP_INT16PUSH__) {
+								t_int16 int16;
+								int16.i = (short)stod(word);
+								varsetop.OP_VALUE = int16.c;
+							}
+							else if (varDefinition.OP_TYPE == __OP_INT32PUSH__) {
+								t_int32 int32;
+								int32.i = (int)stod(word);
+								varsetop.OP_VALUE = int32.c;
+							}
+							else if (varDefinition.OP_TYPE == __OP_INT64PUSH__) {
+								t_int64 int64;
+								int64.i = (long)stod(word);
+								varsetop.OP_VALUE = int64.c;
+							}
+							else if (varDefinition.OP_TYPE == __OP_INT128PUSH__) {
+								t_int128 int128;
+								int128.i = (long long)stod(word);
+								varsetop.OP_VALUE = int128.c;
+							}
+							// FLOAT
+							else if (varDefinition.OP_TYPE == __OP_FLOAT16PUSH__) {
+								t_float16 float16;
+								float16.f = (float)StrToLongDouble(word);
+								varsetop.OP_VALUE = float16.c;
+							}
+							else if (varDefinition.OP_TYPE == __OP_FLOAT32PUSH__) {
+								t_float32 float32;
+								float32.f = (float)StrToLongDouble(word);
+								varsetop.OP_VALUE = float32.c;
+							}
+							else if (varDefinition.OP_TYPE == __OP_FLOAT64PUSH__) {
+								t_float64 float64;
+								float64.f = (double)StrToLongDouble(word);
+								varsetop.OP_VALUE = float64.c;
+							}
+							else if (varDefinition.OP_TYPE == __OP_FLOAT128PUSH__) {
+								t_float128 float128;
+								float128.f = StrToLongDouble(word);
+								varsetop.OP_VALUE = float128.c;
+							}
+							// UNREACHABLE
+							else {
+								cout << "--- compilation error in line (" << countLines << "): '" << line << "'; <-- type mismatch on reset variable '" << varDefinition.OP_LABEL << "'.\n";
+								exit(1);
+							}
+						}
 					}
 
 					_Stack_.push_back(varsetop);

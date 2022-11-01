@@ -1,6 +1,6 @@
 ;; first simple example
 
-int i 0 int a 0 int b 0
+int i 0 var a 0 int b 0
 
 if i == 0 ; if it's equal to 0 then sets 'a'
     a 1
