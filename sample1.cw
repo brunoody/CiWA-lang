@@ -13,6 +13,8 @@ if a == 1
     println a
 elsif b == 1
     println "b is 1"
+else
+    println "ERROR: unreachable"
 end
 
 ;; end of test #1

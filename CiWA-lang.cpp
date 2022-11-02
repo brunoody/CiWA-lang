@@ -38,6 +38,7 @@ const short __OP_VARSETVAL__ =			IOTA();
 
 /*	 COMMANDS	*/
 const short __OP_IFSTART__ =			IOTA();
+const short __OP_THENSTART__ =			IOTA();
 const short __OP_ELSE__ =				IOTA();
 const short __OP_ELSIF_ =				IOTA();
 const short __OP_END__ =				IOTA();
@@ -85,6 +86,7 @@ typedef union t_int64 {
 typedef union t_int128 {
 	long long i;
 	char c[16];
+	char* ptr;
 };
 
 typedef struct float_parsed {
@@ -110,6 +112,7 @@ typedef union t_float64 {
 typedef union t_float128 {
 	long double f;
 	char c[16];
+	char* ptr;
 };
 
 /***************************************/
@@ -285,7 +288,7 @@ operation OpPush(string line, string word, long lineNumber, short OP_TYPE) {
 			}
 			else if (OP_TYPE == __OP_INT128PUSH__) {
 				t_int128 int128;
-				int128.i = (long long)stod(word);
+				int128.ptr = (char*)(long long)stod(word);
 				op.OP_VALUE = int128.c;
 			}
 			// FLOAT
@@ -390,12 +393,19 @@ void IfPush(list<operation> &_Stack_, string line, string word, long countLines,
 
 	_Stack_.push_back(condop); // only added after the addition of the 2 variables to be tested
 
-	// lastly, opens the if block
+	// opens the if block
 	operation ifop;
 	ifop.OP_TYPE = __OP_IFSTART__;
 	ifop.OP_LABEL = StrToCharPointer("If");
 	ifop.OP_VALUE = StrToCharPointer("If");
 	_Stack_.push_back(ifop);
+
+	// opens the then block
+	operation thenop;
+	thenop.OP_TYPE = __OP_THENSTART__;
+	thenop.OP_LABEL = StrToCharPointer("Then");
+	thenop.OP_VALUE = StrToCharPointer("Then");
+	_Stack_.push_back(thenop);
 }
 
 /***************************************/
@@ -406,6 +416,7 @@ int main()
 	bool printStack = true;
 	const regex r("((\\+|-)?[[:d:]]+)(\\.(([[:d:]]+)?))?");
 	fstream file("../../../sample1.cw", ios::in); // ios::out | ios::trunc | ios::app
+	short countElsif = 0;
 
 	if (file.is_open()) {
 		string line = "";
@@ -493,17 +504,42 @@ int main()
 				else if (word == "if") {
 					IfPush(_Stack_, line, word, countLines, r);
 				}
-
+				
+				// TODO : review this code below after adding While and For loops
 				else if (word == "end") {
+					// for each 'elsif' before the 'end' token, the compiler must add another 2 end-closures -> '))'
+					for (int i = 0; i < countElsif; i++) {
+						operation endop;
+						endop.OP_TYPE = __OP_END__;
+						endop.OP_LABEL = StrToCharPointer("End");
+						endop.OP_VALUE = StrToCharPointer("End");
+
+						_Stack_.push_back(endop);
+						_Stack_.push_back(endop);
+					}
+					countElsif = 0;
+					
+					// Each End-statement has to close one of either options:
+					//		a. If + Then
+					//		b. Else + its If
+					// Conclusion: always has to close 2 times (for If-Elsif-Else-blocks) -> '))'
+					operation endop;
+					endop.OP_TYPE = __OP_END__;
+					endop.OP_LABEL = StrToCharPointer("End");
+					endop.OP_VALUE = StrToCharPointer("End");
+
+					_Stack_.push_back(endop);
+					_Stack_.push_back(endop);
+				}
+
+				else if (word == "else") {
+					// Else-statements don't close the If-statements before them, but they must close the Then-blocks
 					operation op;
 					op.OP_TYPE = __OP_END__;
 					op.OP_LABEL = StrToCharPointer("End");
 					op.OP_VALUE = StrToCharPointer("End");
 					_Stack_.push_back(op);
-				}
 
-				else if (word == "else") {
-					// Else-statements don't close the If-statements before them, but they must close the Then-blocks
 					operation elseop;
 					elseop.OP_TYPE = __OP_ELSE__;
 					elseop.OP_LABEL = StrToCharPointer("Else");
@@ -512,12 +548,21 @@ int main()
 				}
 
 				else if (word == "elsif") {
-					// firstly closes the block before
+					countElsif++; // add 1 to the counter
+
+					// firstly closes the Then-block before
 					operation op;
 					op.OP_TYPE = __OP_END__;
 					op.OP_LABEL = StrToCharPointer("End");
 					op.OP_VALUE = StrToCharPointer("End");
 					_Stack_.push_back(op);
+
+					// then opens the Else-block inside the If-statement
+					operation elseop;
+					elseop.OP_TYPE = __OP_ELSE__;
+					elseop.OP_LABEL = StrToCharPointer("Else");
+					elseop.OP_VALUE = StrToCharPointer("Else");
+					_Stack_.push_back(elseop);
 
 					// then creates a new If-like operations sequence
 					IfPush(_Stack_, line, word, countLines, r);
