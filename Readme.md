@@ -4,18 +4,18 @@
     It was originally written through C - thus being called CiWA - and compiled directly to wasm.
     
 -- There are two basic ways of syntax writting:
-    1. with arrow-function-like code after a condition or loop (which means inline code, working only for a single command), or
-    2. with the use of the special word 'end' to finish the block.
+    1. with arrow-function-like code after a condition/loop condition - for inline code, or
+    2. with the use of the special word 'end' to start and finish the block.
 
 # Some syntax basic examples:
-## With arrow-function-like (a block of a single command):
+## With arrow-function-like (inline code sequence):
 
     ### For loops:
 for items => int i, var item => ...         <<<--- from the list 'items' it extracts the key 'i' and the value 'item' as a tuple
 
-for items => item => ...                    <<<--- from the list 'items' it extracts the tuple (key, value) as well, but only keeps the value 'item' stored in memory
+for items => var item => ...                <<<--- from the list 'items' it extracts the tuple (key, value) as well, but only keeps the value 'item' stored in memory
 
-for range[-n:n] => int i => ...             <<<--- standard 'for' loop with no Array/List as anchor - from '-n' to 'n'
+for -n:n => int i => ...                    <<<--- standard 'for' loop with no Array/List as anchor - from '-n' to 'n'
 
     ### Other:
 if i > 0 => ...
@@ -33,7 +33,7 @@ for items => var item                       <<<--- from the list 'items' it extr
     ...
 end
 
-for range[-n:n] => int i                    <<<--- standard 'for' loop with no Array/List as anchor - from '-n' to 'n'
+for -n:n => int i                           <<<--- standard 'for' loop with no Array/List as anchor - from '-n' to 'n'
     ...
 end
 
@@ -47,9 +47,9 @@ while i == 0
 end
 
 # Basic types:
-### Integer:         int[x] : where [x] equals the number of bits    (ranging from 8 to 128 bits - standard 'int' is 32 bits of size)
+### Integer:         int[x] : where [x] equals the number of bits    (ranging from 8 to 128 bits - standard 'int' is 32 bits)
 
-### Floating point:  float[x]: where [x] equals the number of bits   (ranging from 16 to 128 bits - standard 'int' is 32 bits of size)
+### Floating point:  float[x]: where [x] equals the number of bits   (ranging from 16 to 128 bits - standard 'float' is 32 bits)
 
 ### Boolean:         bool                                            (basic true or false)
 
@@ -59,11 +59,12 @@ end
 
 ### Array/List:      array[type]                                     (stores [0:n] elements and the counter for the elements of the given type)
 
-### Generic:         var                                             (a generic byte array that can store any kind of value - must be casted accordingly when read)
+### Generic:         var                                             (a generic byte array that can store any kind of value - must be casted accordingly when read - a stealthy pointer)
         PS.1: 'var' can be used to store Text values and there's no difference between char and string, or such.
         PS.2: the generic 'var', when manipulated with arithmetic operands, will be treated as an Integer.
-        PS.3: the generic 'var' is an actual pointer to an allocated dynamic range of memory.
-        PS.4: reminder about bytes and sizes -> 2^1byte = 2^8 = 256 bytes ; 2^8bytes = 2^64 = 17.179.869.184 Gigabytes.
+        PS.3: the generic 'var', when manipulated with binary operands, will be treated a Byte[].
+        PS.4: the generic 'var' is an actual pointer to an allocated dynamic range of memory.
+        PS.5: reminder about bytes and sizes -> 2^1byte = 2^8 = 256 bytes ; 2^8bytes = 2^64 = 17.179.869.184 Gigabytes.
 
 # Functions:
 ### Accepts [0:n] parameters with given types (or var, which has to be casted when read) and may or may not return a value (without the need of specification).
@@ -73,4 +74,4 @@ func Foo var a, int b, string c             <<<--- standard expression
     ...
 end
 
-func Foo var a, int b, string c => ...      <<<--- inline single-command
+func Foo var a, int b, string c => ...      <<<--- inline expression

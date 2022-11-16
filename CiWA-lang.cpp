@@ -37,10 +37,12 @@ const short __OP_CONSTDEF__ =			IOTA();
 const short __OP_VARSETVAL__ =			IOTA();
 
 /*	 COMMANDS	*/
-const short __OP_IFSTART__ =			IOTA();
-const short __OP_THENSTART__ =			IOTA();
+const short __OP_IF__ =					IOTA();
+const short __OP_THEN__ =				IOTA();
 const short __OP_ELSE__ =				IOTA();
-const short __OP_ELSIF_ =				IOTA();
+const short __OP_ELSIF__ =				IOTA();
+const short __OP_WHILE__ =				IOTA();
+const short __OP_FOR__ =				IOTA();
 const short __OP_END__ =				IOTA();
 const short __OP_PRINTLN__ =			IOTA();
 
@@ -58,14 +60,21 @@ const short __OP_LESSOREQUAL__ =		IOTA();
 
 typedef struct operation {
 	int	  OP_TYPE = -1;
-	char* OP_LABEL = 0; // the address label or typename for the WebAssembly code
-	char* OP_VALUE = 0; // can be any size of byte[], basically
+	char* OP_LABEL = NULL; // the address label or typename for the WebAssembly code
+	char* OP_VALUE = NULL; // can be any size of byte[], basically
 	bool  OP_TEXTFLAG = false; // defines if it's a text variable
+	bool  OP_BLOCK_CLOSED = false; // for block openers, to know when they were already closed
+};
+
+typedef struct float_parsed {
+	string intPart = "";
+	string floatPart = "";
+	unsigned char floatPoints;
 };
 
 typedef union t_int8 {
-	short i;
-	char c;
+	char i;
+	char c[1];
 };
 
 typedef union t_int16 {
@@ -79,24 +88,18 @@ typedef union t_int32 {
 };
 
 typedef union t_int64 {
-	long i;
+	long long i;
 	char c[8];
 };
 
-typedef union t_int128 {
-	long long i;
-	char c[16];
-	char* ptr;
-};
-
-typedef struct float_parsed {
-	string intPart = "";
-	string floatPart = "";
+typedef struct s__float16__ {
+	char p1[2];
+	char p2[2];
 };
 
 typedef union t_float16 {
 	float f;
-	char c[2];
+	s__float16__ c;
 };
 
 typedef union t_float32{
@@ -105,16 +108,39 @@ typedef union t_float32{
 };
 
 typedef union t_float64 {
-	double f;
+	long double f;
 	char c[8];
 };
 
-typedef union t_float128 {
-	long double f;
-	char c[16];
-	char* ptr;
+/*	128bit INT	*/
+typedef struct s__int128__ {
+	long long i_hi;
+	long long i_lo;
 };
+typedef union t_int128 {
+	s__int128__ s_val;
+	char val[16];
+};
+t_int128 CreateInt128() {
+	t_int128 hi_lo;
+	hi_lo.s_val.i_hi = hi_lo.s_val.i_lo = 0;
+	return hi_lo;
+}
 
+/*	128bit FLOAT  */
+typedef struct s__float128__ {
+	long double f_hi;
+	long double f_lo;
+};
+typedef union t_float128 {
+	s__float128__ s_val;
+	char val[16];
+};
+t_float128 CreateFloat128() {
+	t_float128 hi_lo;
+	hi_lo.s_val.f_hi = hi_lo.s_val.f_lo = 0;
+	return hi_lo;
+}
 /***************************************/
 
 /*			UTILLS			*/
@@ -161,6 +187,20 @@ char* StrToCharPointer(string str, bool addNullChar = true) {
 	return ret;
 }
 
+unsigned char* StrToUnsignedCharPointer(string str, bool addNullChar = false) {
+	unsigned char* ret = 0;
+	if (addNullChar) {
+		ret = new unsigned char[str.size() + 1];
+		copy(str.begin(), str.end(), ret);
+		ret[str.size()] = '\0'; // 'end char'
+	}
+	else {
+		ret = new unsigned char[str.size()];
+		copy(str.begin(), str.end(), ret);
+	}
+	return ret;
+}
+
 short floatPoints = 0;
 float_parsed ParseFloat(string str) {
 	short pointIndex = 0;
@@ -174,6 +214,7 @@ float_parsed ParseFloat(string str) {
 	float_parsed parse;
 	parse.intPart = str.substr(0, pointIndex);
 	parse.floatPart = str.substr(pointIndex + 1, str.size());
+	parse.floatPoints = floatPoints;
 	return parse;
 }
 
@@ -188,10 +229,63 @@ long double StrToLongDouble(string str, short shiftBits = 0) {
 	for (int i = 1; i < floatPoints; i++) {
 		divisor = divisor * 10.0;
 	}
-	const long double doublePart = floatPartAsLongLong / divisor;
-	t_float128 ret;
-	ret.f = longLongPart + doublePart;
-	return ret.f;
+	long double ret = longLongPart + (long double)(floatPartAsLongLong / divisor);
+	return ret;
+}
+
+t_int128 StrToInt128(string str) {
+	t_int128 ret = CreateInt128();
+	unsigned short* cVals = new unsigned short[str.size()];
+	string c = "";
+	for (short i = str.size()-1; i >= 0; i--) {
+		cVals[i] = stod(str.substr(i, 1));
+	}
+
+	unsigned long long multi10 = 1;
+	bool hasReachedMaxLo = false;
+	unsigned long long diff = 0;
+	for (short n = str.size()-1; n >= 0; n--) {
+		if ( (ret.s_val.i_lo + cVals[n]*multi10) >= 0xFFFFFFFFFFFFFFFF ) {
+			ret.s_val.i_lo = 0xFFFFFFFFFFFFFFFF;
+			diff = 9 - cVals[n];
+			if (diff < 0) {
+				diff = -diff;
+			}
+			hasReachedMaxLo = true;
+			multi10 = 1;
+			continue;
+		}
+
+		if (!hasReachedMaxLo) {
+			ret.s_val.i_lo += cVals[n]*multi10;
+		}
+		else {
+			ret.s_val.i_hi += ((cVals[n]+diff) * multi10);
+			diff = 0;
+		}
+		multi10 *= 10;
+	}
+
+	delete cVals;
+	return ret;
+}
+
+t_float128 StrToFloat128(string str) {
+	t_int128 iPart = StrToInt128(ParseFloat(str).intPart);
+	t_int128 fPart = StrToInt128(ParseFloat(str).floatPart);
+	double divisor = 10.0;
+	for (int i = 1; i < ParseFloat(str).floatPoints; i++) {
+		divisor = divisor * 10.0;
+	}
+	t_float64 f64;
+	f64.f = (fPart.s_val.i_lo / divisor);
+	// TODO : must test if the value has overflown the 64bit size to start inserting into the low part
+	// needs 4bit shift-right because of quadruple precision IEEE
+	// TODO : review data precision and calculations theory for quadruple-precision float
+	t_float128 ret = CreateFloat128();
+	ret.s_val.f_lo = iPart.s_val.i_lo + f64.f;
+
+	return ret;
 }
 
 string GetVarchar(string line, string token) {
@@ -228,6 +322,7 @@ string GetVarchar(string line, string token) {
 
 /*		 OPERATION UTILS		*/
 operation OpPush(string line, string word, long lineNumber, short OP_TYPE) {
+	// TODO : after returning the new OP and adding to the Stack, it screws the variable values
 	operation op;
 	op.OP_TYPE = OP_TYPE;
 
@@ -262,14 +357,11 @@ operation OpPush(string line, string word, long lineNumber, short OP_TYPE) {
 			op.OP_VALUE = StrToCharPointer(word);
 		}
 		else { // otherwise, it's a number value
-
-			// TODO: 128bit support isn't quite good as proposed initially, needs refinement
 			// INTEGER
 			if (OP_TYPE == __OP_INT8PUSH__) {
-				op.OP_VALUE = (char*)malloc(1);
 				t_int8 int8;
-				int8.i = (short)stod(word);
-				*op.OP_VALUE = int8.c;
+				int8.i = (char)stod(word);
+				op.OP_VALUE = int8.c;
 			}
 			else if (OP_TYPE == __OP_INT16PUSH__) {
 				t_int16 int16;
@@ -283,19 +375,18 @@ operation OpPush(string line, string word, long lineNumber, short OP_TYPE) {
 			}
 			else if (OP_TYPE == __OP_INT64PUSH__) {
 				t_int64 int64;
-				int64.i = (long)stod(word);
+				int64.i = (long long)stod(word);
 				op.OP_VALUE = int64.c;
 			}
 			else if (OP_TYPE == __OP_INT128PUSH__) {
-				t_int128 int128;
-				int128.ptr = (char*)(long long)stod(word);
-				op.OP_VALUE = int128.c;
+				t_int128 int128 = StrToInt128(word);
+				op.OP_VALUE = int128.val;
 			}
 			// FLOAT
 			else if (OP_TYPE == __OP_FLOAT16PUSH__) {
 				t_float16 float16;
 				float16.f = (float)StrToLongDouble(word);
-				op.OP_VALUE = float16.c;
+				op.OP_VALUE = float16.c.p2;
 			}
 			else if (OP_TYPE == __OP_FLOAT32PUSH__) {
 				t_float32 float32;
@@ -304,13 +395,17 @@ operation OpPush(string line, string word, long lineNumber, short OP_TYPE) {
 			}
 			else if (OP_TYPE == __OP_FLOAT64PUSH__) {
 				t_float64 float64;
-				float64.f = (double)StrToLongDouble(word);
+				float64.f = (long double)StrToLongDouble(word);
 				op.OP_VALUE = float64.c;
 			}
 			else if (OP_TYPE == __OP_FLOAT128PUSH__) {
-				t_float128 float128;
-				float128.f = StrToLongDouble(word);
-				op.OP_VALUE = float128.c;
+				t_float128 float128 = StrToFloat128(word);
+				op.OP_VALUE =float128.val;
+			}
+			// UNREACHABLE
+			else {
+				cout << "--- compilation error in line (" << lineNumber << "): '" << line << "'; <-- type mismatch on variable '" << op.OP_LABEL << "'.\n";
+				exit(1);
 			}
 		}
 	}
@@ -340,33 +435,33 @@ void IfPush(list<operation> &_Stack_, string line, string word, long countLines,
 	condop.OP_LABEL = new char[4];
 	if (word == "==") {
 		condop.OP_TYPE = __OP_EQUALS__;
-		condop.OP_LABEL = StrToCharPointer("eq");
-		condop.OP_VALUE = StrToCharPointer("eq");
+		condop.OP_LABEL = StrToCharPointer("eq_s");
+		condop.OP_VALUE = StrToCharPointer("eq_s");
 	}
 	else if (word == "!=") {
 		condop.OP_TYPE = __OP_NOTEQUALS__;
-		condop.OP_LABEL = StrToCharPointer("ne");
-		condop.OP_VALUE = StrToCharPointer("ne");
+		condop.OP_LABEL = StrToCharPointer("ne_s");
+		condop.OP_VALUE = StrToCharPointer("ne_s");
 	}
 	else if (word == ">") {
 		condop.OP_TYPE = __OP_GREATER__;
-		condop.OP_LABEL = StrToCharPointer("gt");
-		condop.OP_VALUE = StrToCharPointer("gt");
+		condop.OP_LABEL = StrToCharPointer("gt_s");
+		condop.OP_VALUE = StrToCharPointer("gt_s");
 	}
 	else if (word == ">=") {
 		condop.OP_TYPE = __OP_GREATEROREQUAL__;
-		condop.OP_LABEL = StrToCharPointer("ge");
-		condop.OP_VALUE = StrToCharPointer("ge");
+		condop.OP_LABEL = StrToCharPointer("ge_s");
+		condop.OP_VALUE = StrToCharPointer("ge_s");
 	}
 	else if (word == "<") {
 		condop.OP_TYPE = __OP_LESS__;
-		condop.OP_LABEL = StrToCharPointer("lt");
-		condop.OP_VALUE = StrToCharPointer("lt");
+		condop.OP_LABEL = StrToCharPointer("lt_s");
+		condop.OP_VALUE = StrToCharPointer("lt_s");
 	}
 	else if (word == "<=") {
 		condop.OP_TYPE = __OP_LESSOREQUAL__;
-		condop.OP_LABEL = StrToCharPointer("le");
-		condop.OP_VALUE = StrToCharPointer("le");
+		condop.OP_LABEL = StrToCharPointer("le_s");
+		condop.OP_VALUE = StrToCharPointer("le_s");
 	}
 	else {
 		cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- invalid conditional operation.\n";
@@ -395,34 +490,78 @@ void IfPush(list<operation> &_Stack_, string line, string word, long countLines,
 
 	// opens the if block
 	operation ifop;
-	ifop.OP_TYPE = __OP_IFSTART__;
+	ifop.OP_TYPE = __OP_IF__;
 	ifop.OP_LABEL = StrToCharPointer("If");
 	ifop.OP_VALUE = StrToCharPointer("If");
 	_Stack_.push_back(ifop);
 
 	// opens the then block
 	operation thenop;
-	thenop.OP_TYPE = __OP_THENSTART__;
+	thenop.OP_TYPE = __OP_THEN__;
 	thenop.OP_LABEL = StrToCharPointer("Then");
 	thenop.OP_VALUE = StrToCharPointer("Then");
 	_Stack_.push_back(thenop);
 }
 
+string DiscoverBlockToClose(list<operation>& _Stack_) {
+	string closingBlock = "";
+
+	auto op = _Stack_.begin();
+	advance(op, _Stack_.size() - 1);
+	for (int i = _Stack_.size() - 1; i >= 0; i--) {
+		if (!op->OP_BLOCK_CLOSED &&
+			(op->OP_TYPE == __OP_IF__ || op->OP_TYPE == __OP_WHILE__ || op->OP_TYPE == __OP_FOR__)
+		) {
+			closingBlock = op->OP_LABEL;
+			op->OP_BLOCK_CLOSED = true;
+			break;
+		}
+		op = _Stack_.begin();
+		advance(op, i);
+	}
+
+	return closingBlock;
+}
+
 /***************************************/
 
-/*		 MAIN PROGRAM		*/
-int main()
+/*		   TEST MAIN		*/
+int Test () {
+
+	cout << " Size of Base Struct = " << sizeof(s__int128__) << "\n";
+	cout << " Size of Type i128 = " << sizeof(t_int128) << "\n";
+
+	s__int128__ s_int; s_int.i_hi = s_int.i_lo = 0;
+	t_int128 t_int = CreateInt128();
+
+	cout << " Init value of Struct =>> hi = " << s_int.i_hi << " : lo = " << s_int.i_lo << "\n";
+	cout << " Init value of Type i128 = " << t_int.val << "\n";
+
+	cout << "\n\n";
+
+	cout << " Size of Base Struct = " << sizeof(s__float128__) << "\n";
+	cout << " Size of Type f128 = " << sizeof(t_float128) << "\n";
+
+	s__float128__ s_float; s_float.f_hi = s_float.f_lo = 0.0;
+	t_float128 t_float = CreateFloat128();
+
+	cout << " Init value of Struct =>> hi = " << s_float.f_hi << " : lo = " << s_float.f_lo << "\n";
+	cout << " Init value of Type f128 = " << t_float.val << "\n";
+	
+	return 0;
+}
+
+/*		 FILE PARSER		*/
+list<operation> ParseFileToWasmStack (bool printStack = true)
 {
-	bool printStack = true;
 	const regex r("((\\+|-)?[[:d:]]+)(\\.(([[:d:]]+)?))?");
-	fstream file("../../../sample1.cw", ios::in); // ios::out | ios::trunc | ios::app
+	fstream file("../../../sample2-multiple_types.cw", ios::in); // ios::out | ios::trunc | ios::app
 	short countElsif = 0;
+	list<operation> _Stack_; // the stack of programm operations
 
 	if (file.is_open()) {
 		string line = "";
-		//string word = "";
 		long countLines = 0;
-		list<operation> _Stack_; // the stack of programm operations
 
 		while (getline(file, line)) {
 			countLines++;
@@ -433,7 +572,8 @@ int main()
 			while (line[0] == '\0' || line[0] == ' ') {
 				line = line.substr(1, line.size());
 			}
-			
+
+			// PARSE the file
 			string word = GetToken(StrToCharPointer(line), ' ', true);
 			while (word != "") {
 				if (word[0] == ';' || word == "") { // if it's a comment or empty line, just jump to the next one
@@ -471,7 +611,7 @@ int main()
 					operation op = OpPush(line, word, countLines, __OP_FLOAT16PUSH__);
 					_Stack_.push_back(op);
 				}
-				
+
 				else if (word == "float32" || word == "float") {
 					operation op = OpPush(line, word, countLines, __OP_FLOAT32PUSH__);
 					_Stack_.push_back(op);
@@ -499,16 +639,35 @@ int main()
 
 				/*****************************************************/
 
-				/*				---	CONDITIONAL ---				*/
+				/*				---	KEYWORDS ---				*/
 
 				else if (word == "if") {
 					IfPush(_Stack_, line, word, countLines, r);
 				}
-				
-				// TODO : review this code below after adding While and For loops
+
+				// need to iterate through the _Stack_ and discover which block isn't closed yet, then
+				// TODO: needs to check whether a block isn't closed till the end of the code to throw a compiler error
 				else if (word == "end") {
-					// for each 'elsif' before the 'end' token, the compiler must add another 2 end-closures -> '))'
-					for (int i = 0; i < countElsif; i++) {
+					string closingBlock = DiscoverBlockToClose(_Stack_);
+
+					if (closingBlock == "If")
+					{
+						// for each 'elsif' before the 'end' token, the compiler must add another 2 end-closures -> '))'
+						for (int i = 0; i < countElsif; i++) {
+							operation endop;
+							endop.OP_TYPE = __OP_END__;
+							endop.OP_LABEL = StrToCharPointer("End");
+							endop.OP_VALUE = StrToCharPointer("End");
+
+							_Stack_.push_back(endop);
+							_Stack_.push_back(endop);
+						}
+						countElsif = 0;
+
+						// Each End-statement has to close one of either options:
+						//		a. If + Then
+						//		b. Else + its If
+						// Conclusion: always has to close 2 times (for If-Elsif-Else-blocks) -> '))'
 						operation endop;
 						endop.OP_TYPE = __OP_END__;
 						endop.OP_LABEL = StrToCharPointer("End");
@@ -517,19 +676,12 @@ int main()
 						_Stack_.push_back(endop);
 						_Stack_.push_back(endop);
 					}
-					countElsif = 0;
-					
-					// Each End-statement has to close one of either options:
-					//		a. If + Then
-					//		b. Else + its If
-					// Conclusion: always has to close 2 times (for If-Elsif-Else-blocks) -> '))'
-					operation endop;
-					endop.OP_TYPE = __OP_END__;
-					endop.OP_LABEL = StrToCharPointer("End");
-					endop.OP_VALUE = StrToCharPointer("End");
-
-					_Stack_.push_back(endop);
-					_Stack_.push_back(endop);
+					else if (closingBlock == "While") {
+						// TODO
+					}
+					else if (closingBlock == "For") {
+						// TODO
+					}
 				}
 
 				else if (word == "else") {
@@ -649,11 +801,20 @@ int main()
 						}
 						else if (word == "true" || word == "false" || word == "null") { // for either boolean values or nullables
 							varsetop.OP_VALUE = new char[1];
-							*varsetop.OP_VALUE = word == "true" ? 1 : 0;
+							varsetop.OP_VALUE[0] = word == "true" ? 1 : 0;
 							varsetop.OP_TEXTFLAG = false;		// forces the var to not be a text one, if it was
 						}
-						else {
-							varsetop.OP_VALUE = StrToCharPointer(word);
+						else { // treats as numeric value
+							if (word.find(".") != string::npos) {
+								// it's a Float value
+								t_float128 float128 = StrToFloat128(word);
+								strcpy(varsetop.OP_VALUE, float128.val);
+							}
+							else {
+								// Integer
+								t_int128 int128 = StrToInt128(word);
+								strcpy(varsetop.OP_VALUE, int128.val);
+							}
 							varsetop.OP_TEXTFLAG = false;		// forces the var to not be a text one, if it was
 						}
 					}
@@ -666,18 +827,17 @@ int main()
 
 						if (varDefinition.OP_TYPE == __OP_BOOLEANPUSH__) { // forces any number to boolean
 							varsetop.OP_VALUE = new char[1];
-							*varsetop.OP_VALUE = stod(word) > 0 ? 1 : 0;
+							varsetop.OP_VALUE[0] = word == "true" || stod(word) > 0 ? 1 : 0;
 						}
 
 						// NUMBER REATTRIBUTIONS
 						else {
-							// TODO: 128bit support isn't quite good as proposed initially, needs refinement
+
 							// INTEGER
 							if (varDefinition.OP_TYPE == __OP_INT8PUSH__) {
-								varsetop.OP_VALUE = (char*)malloc(1);
 								t_int8 int8;
-								int8.i = (short)stod(word);
-								*varsetop.OP_VALUE = int8.c;
+								int8.i = (char)stod(word);
+								varsetop.OP_VALUE = int8.c;
 							}
 							else if (varDefinition.OP_TYPE == __OP_INT16PUSH__) {
 								t_int16 int16;
@@ -691,19 +851,18 @@ int main()
 							}
 							else if (varDefinition.OP_TYPE == __OP_INT64PUSH__) {
 								t_int64 int64;
-								int64.i = (long)stod(word);
+								int64.i = (long long)stod(word);
 								varsetop.OP_VALUE = int64.c;
 							}
 							else if (varDefinition.OP_TYPE == __OP_INT128PUSH__) {
-								t_int128 int128;
-								int128.i = (long long)stod(word);
-								varsetop.OP_VALUE = int128.c;
+								t_int128 int128 = StrToInt128(word);
+								varsetop.OP_VALUE = int128.val;
 							}
 							// FLOAT
 							else if (varDefinition.OP_TYPE == __OP_FLOAT16PUSH__) {
 								t_float16 float16;
 								float16.f = (float)StrToLongDouble(word);
-								varsetop.OP_VALUE = float16.c;
+								varsetop.OP_VALUE = float16.c.p2;
 							}
 							else if (varDefinition.OP_TYPE == __OP_FLOAT32PUSH__) {
 								t_float32 float32;
@@ -712,13 +871,12 @@ int main()
 							}
 							else if (varDefinition.OP_TYPE == __OP_FLOAT64PUSH__) {
 								t_float64 float64;
-								float64.f = (double)StrToLongDouble(word);
+								float64.f = (long double)StrToLongDouble(word);
 								varsetop.OP_VALUE = float64.c;
 							}
 							else if (varDefinition.OP_TYPE == __OP_FLOAT128PUSH__) {
-								t_float128 float128;
-								float128.f = StrToLongDouble(word);
-								varsetop.OP_VALUE = float128.c;
+								t_float128 float128 = StrToFloat128(word);
+								varsetop.OP_VALUE = float128.val;
 							}
 							// UNREACHABLE
 							else {
@@ -752,13 +910,11 @@ int main()
 
 		if (printStack) {
 			cout << "Stack: \n\n";
-			int count = 0;
-			_Stack_.begin();
-			while(_Stack_.size()) {
-				operation op = _Stack_.front();
-				cout << "   #" << count++ << "   OP_TYPE = " << op.OP_TYPE << "   OP_LABEL = " << op.OP_LABEL;
-				cout << "   OP_VALUE = " << op.OP_VALUE << "\n\n";
-				_Stack_.pop_front();
+			auto op = _Stack_.begin();
+			for (int i = 0; i < _Stack_.size(); i++) {
+				cout << "   #" << i << "   OP_TYPE = " << op->OP_TYPE << "   OP_LABEL = " << op->OP_LABEL;
+				cout << "   OP_VALUE = " << op->OP_VALUE << "\n\n";
+				advance(op, 1);
 			}
 		}
 		
@@ -770,6 +926,16 @@ int main()
 	}
 
 	cout << "file compiled successfully!\n\n";
+
+	return _Stack_;
+}
+
+/*		 MAIN PROGRAM		*/
+int main() {
+
+	//Test();
+
+	ParseFileToWasmStack();
 
 	return 0;
 }
