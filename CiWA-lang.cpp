@@ -5,6 +5,28 @@
 #include "./CiWA-lang.h"
 using namespace std;
 
+/*				  GLOBALS				*/
+
+typedef struct operation {
+	int	  OP_TYPE = -1;
+	char* OP_LABEL = NULL; // the address label or typename for the WebAssembly code
+	char* OP_VALUE = NULL; // can be any size of byte[], basically
+	bool  OP_TEXTFLAG = false; // defines if it's a text variable
+	bool  OP_BLOCK_CLOSED = false; // for block openers, to know when they were already closed
+};
+
+typedef struct float_parsed {
+	string intPart = "";
+	string floatPart = "";
+	unsigned char floatPoints = -1;
+};
+
+#define __MAXOPS__ 1024
+int _Ops_Count_ = 0;
+operation _Stack_[__MAXOPS__]; // the stack of programm operations
+
+/***************************************/
+
 /*		ENUMERATION FUNC      */
 int iota = 0;
 int IOTA(bool reset = false) {
@@ -57,20 +79,6 @@ const short __OP_LESSOREQUAL__ =		IOTA();
 /***************************************/
 
 /*	 TYPE DEFINITIONS	*/
-
-typedef struct operation {
-	int	  OP_TYPE = -1;
-	char* OP_LABEL = NULL; // the address label or typename for the WebAssembly code
-	char* OP_VALUE = NULL; // can be any size of byte[], basically
-	bool  OP_TEXTFLAG = false; // defines if it's a text variable
-	bool  OP_BLOCK_CLOSED = false; // for block openers, to know when they were already closed
-};
-
-typedef struct float_parsed {
-	string intPart = "";
-	string floatPart = "";
-	unsigned char floatPoints;
-};
 
 typedef union t_int8 {
 	char i;
@@ -233,7 +241,7 @@ long double StrToLongDouble(string str, short shiftBits = 0) {
 	return ret;
 }
 
-t_int128 StrToInt128(string str) {
+t_int128* StrToInt128(string str) {
 	t_int128 ret = CreateInt128();
 	unsigned short* cVals = new unsigned short[str.size()];
 	string c = "";
@@ -243,7 +251,7 @@ t_int128 StrToInt128(string str) {
 
 	unsigned long long multi10 = 1;
 	bool hasReachedMaxLo = false;
-	unsigned long long diff = 0;
+	unsigned long long diff = 0; 
 	for (short n = str.size()-1; n >= 0; n--) {
 		if ( (ret.s_val.i_lo + cVals[n]*multi10) >= 0xFFFFFFFFFFFFFFFF ) {
 			ret.s_val.i_lo = 0xFFFFFFFFFFFFFFFF;
@@ -267,25 +275,25 @@ t_int128 StrToInt128(string str) {
 	}
 
 	delete cVals;
-	return ret;
+	return &ret;
 }
 
-t_float128 StrToFloat128(string str) {
-	t_int128 iPart = StrToInt128(ParseFloat(str).intPart);
-	t_int128 fPart = StrToInt128(ParseFloat(str).floatPart);
+t_float128* StrToFloat128(string str) {
+	t_int64 iPart; iPart.i = stod(ParseFloat(str).intPart);
+	t_int64 fPart; fPart.i = stod(ParseFloat(str).floatPart);
 	double divisor = 10.0;
 	for (int i = 1; i < ParseFloat(str).floatPoints; i++) {
 		divisor = divisor * 10.0;
 	}
 	t_float64 f64;
-	f64.f = (fPart.s_val.i_lo / divisor);
+	f64.f = (fPart.i / divisor);
 	// TODO : must test if the value has overflown the 64bit size to start inserting into the low part
 	// needs 4bit shift-right because of quadruple precision IEEE
 	// TODO : review data precision and calculations theory for quadruple-precision float
 	t_float128 ret = CreateFloat128();
-	ret.s_val.f_lo = iPart.s_val.i_lo + f64.f;
+	ret.s_val.f_lo = iPart.i + f64.f;
 
-	return ret;
+	return &ret;
 }
 
 string GetVarchar(string line, string token) {
@@ -321,8 +329,7 @@ string GetVarchar(string line, string token) {
 }
 
 /*		 OPERATION UTILS		*/
-operation OpPush(string line, string word, long lineNumber, short OP_TYPE) {
-	// TODO : after returning the new OP and adding to the Stack, it screws the variable values
+void OpPush(string line, string word, long lineNumber, short OP_TYPE, short size) {
 	operation op;
 	op.OP_TYPE = OP_TYPE;
 
@@ -354,53 +361,64 @@ operation OpPush(string line, string word, long lineNumber, short OP_TYPE) {
 			op.OP_VALUE[0] = word == "true" || stod(word) > 0 ? 1 : 0;
 		}
 		else if (OP_TYPE == __OP_VARPUSH__) { // generic 'var', but not char nor string
-			op.OP_VALUE = StrToCharPointer(word);
+			if (word == "null") {
+				op.OP_VALUE = new char[1];
+				op.OP_VALUE[0] = 0;
+			}
+			else {
+				op.OP_VALUE = StrToCharPointer(word);
+			}
 		}
 		else { // otherwise, it's a number value
+			if (word == "null") {
+				word = "0";
+			}
+
+			op.OP_VALUE = new char[size]; // ATTENTION!!! byte[] must be created here not to lose data information afterwards during the compilation
 			// INTEGER
 			if (OP_TYPE == __OP_INT8PUSH__) {
 				t_int8 int8;
 				int8.i = (char)stod(word);
-				op.OP_VALUE = int8.c;
+				op.OP_VALUE[0] = *int8.c;
 			}
 			else if (OP_TYPE == __OP_INT16PUSH__) {
 				t_int16 int16;
 				int16.i = (short)stod(word);
-				op.OP_VALUE = int16.c;
+				*op.OP_VALUE = *int16.c;
 			}
 			else if (OP_TYPE == __OP_INT32PUSH__) {
 				t_int32 int32;
 				int32.i = (int)stod(word);
-				op.OP_VALUE = int32.c;
+				*op.OP_VALUE = *int32.c;
 			}
 			else if (OP_TYPE == __OP_INT64PUSH__) {
 				t_int64 int64;
 				int64.i = (long long)stod(word);
-				op.OP_VALUE = int64.c;
+				*op.OP_VALUE = *int64.c;
 			}
 			else if (OP_TYPE == __OP_INT128PUSH__) {
-				t_int128 int128 = StrToInt128(word);
-				op.OP_VALUE = int128.val;
+				t_int128* int128 = StrToInt128(word);
+				*op.OP_VALUE = *int128->val;
 			}
 			// FLOAT
 			else if (OP_TYPE == __OP_FLOAT16PUSH__) {
 				t_float16 float16;
 				float16.f = (float)StrToLongDouble(word);
-				op.OP_VALUE = float16.c.p2;
+				*op.OP_VALUE = *float16.c.p2;
 			}
 			else if (OP_TYPE == __OP_FLOAT32PUSH__) {
 				t_float32 float32;
 				float32.f = (float)StrToLongDouble(word);
-				op.OP_VALUE = float32.c;
+				*op.OP_VALUE = *float32.c;
 			}
 			else if (OP_TYPE == __OP_FLOAT64PUSH__) {
 				t_float64 float64;
 				float64.f = (long double)StrToLongDouble(word);
-				op.OP_VALUE = float64.c;
+				*op.OP_VALUE = *float64.c;
 			}
 			else if (OP_TYPE == __OP_FLOAT128PUSH__) {
-				t_float128 float128 = StrToFloat128(word);
-				op.OP_VALUE =float128.val;
+				t_float128* float128 = StrToFloat128(word);
+				*op.OP_VALUE = *float128->val;
 			}
 			// UNREACHABLE
 			else {
@@ -410,65 +428,67 @@ operation OpPush(string line, string word, long lineNumber, short OP_TYPE) {
 		}
 	}
 
-	return op;
+	_Stack_[_Ops_Count_] = op;
+	_Ops_Count_++;
 }
 
-void IfPush(list<operation> &_Stack_, string line, string word, long countLines, regex r) {
-	operation popop;
-	popop.OP_TYPE = __OP_VARPOP__;
+void IfPush(string line, string word, long countLines, regex r) {
+	operation* popop = new operation;
+	popop->OP_TYPE = __OP_VARPOP__;
 	word = GetToken(line, ' '); // reads the variable's name
 	if (word == "") {
 		cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected variable name for conditional test definition.\n";
 		exit(1);
 	}
-	popop.OP_LABEL = StrToCharPointer(word);
-	popop.OP_VALUE = StrToCharPointer(word);
-	_Stack_.push_back(popop);
+	popop->OP_LABEL = StrToCharPointer(word);
+	popop->OP_VALUE = StrToCharPointer(word);
+	_Stack_[_Ops_Count_] = *popop;
+	_Ops_Count_++;
 
-	operation condop;
+	operation* condop = new operation;
 	word = GetToken(line, ' '); // reads the conditional operation
 	if (word == "") {
 		cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected a conditional operation.\n";
 		exit(1);
 	}
 
-	condop.OP_LABEL = new char[4];
+	condop->OP_LABEL = new char[4];
 	if (word == "==") {
-		condop.OP_TYPE = __OP_EQUALS__;
-		condop.OP_LABEL = StrToCharPointer("eq_s");
-		condop.OP_VALUE = StrToCharPointer("eq_s");
+		condop->OP_TYPE = __OP_EQUALS__;
+		condop->OP_LABEL = StrToCharPointer("eq_s");
+		condop->OP_VALUE = StrToCharPointer("eq_s");
 	}
 	else if (word == "!=") {
-		condop.OP_TYPE = __OP_NOTEQUALS__;
-		condop.OP_LABEL = StrToCharPointer("ne_s");
-		condop.OP_VALUE = StrToCharPointer("ne_s");
+		condop->OP_TYPE = __OP_NOTEQUALS__;
+		condop->OP_LABEL = StrToCharPointer("ne_s");
+		condop->OP_VALUE = StrToCharPointer("ne_s");
 	}
 	else if (word == ">") {
-		condop.OP_TYPE = __OP_GREATER__;
-		condop.OP_LABEL = StrToCharPointer("gt_s");
-		condop.OP_VALUE = StrToCharPointer("gt_s");
+		condop->OP_TYPE = __OP_GREATER__;
+		condop->OP_LABEL = StrToCharPointer("gt_s");
+		condop->OP_VALUE = StrToCharPointer("gt_s");
 	}
 	else if (word == ">=") {
-		condop.OP_TYPE = __OP_GREATEROREQUAL__;
-		condop.OP_LABEL = StrToCharPointer("ge_s");
-		condop.OP_VALUE = StrToCharPointer("ge_s");
+		condop->OP_TYPE = __OP_GREATEROREQUAL__;
+		condop->OP_LABEL = StrToCharPointer("ge_s");
+		condop->OP_VALUE = StrToCharPointer("ge_s");
 	}
 	else if (word == "<") {
-		condop.OP_TYPE = __OP_LESS__;
-		condop.OP_LABEL = StrToCharPointer("lt_s");
-		condop.OP_VALUE = StrToCharPointer("lt_s");
+		condop->OP_TYPE = __OP_LESS__;
+		condop->OP_LABEL = StrToCharPointer("lt_s");
+		condop->OP_VALUE = StrToCharPointer("lt_s");
 	}
 	else if (word == "<=") {
-		condop.OP_TYPE = __OP_LESSOREQUAL__;
-		condop.OP_LABEL = StrToCharPointer("le_s");
-		condop.OP_VALUE = StrToCharPointer("le_s");
+		condop->OP_TYPE = __OP_LESSOREQUAL__;
+		condop->OP_LABEL = StrToCharPointer("le_s");
+		condop->OP_VALUE = StrToCharPointer("le_s");
 	}
 	else {
 		cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- invalid conditional operation.\n";
 		exit(1);
 	}
 
-	operation poporconstop;
+	operation* poporconstop = new operation;
 	word = GetToken(line, ' '); // reads the second term for conditional testing
 	if (word == "") {
 		cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected variable name or a constant for conditional test definition.\n";
@@ -476,39 +496,43 @@ void IfPush(list<operation> &_Stack_, string line, string word, long countLines,
 	}
 	// defines if it is a number or a variable's name
 	if (regex_match(word, r)) {
-		poporconstop.OP_TYPE = __OP_CONSTDEF__;
-		poporconstop.OP_LABEL = StrToCharPointer("Const");
-		poporconstop.OP_VALUE = StrToCharPointer(word); // the const value is set
+		poporconstop->OP_TYPE = __OP_CONSTDEF__;
+		poporconstop->OP_LABEL = StrToCharPointer("Const");
+		poporconstop->OP_VALUE = StrToCharPointer(word); // the const value is set
 	}
 	else {
-		poporconstop.OP_TYPE = __OP_VARPOP__;
-		poporconstop.OP_LABEL = StrToCharPointer(word); // tha variable's name is saved
+		poporconstop->OP_TYPE = __OP_VARPOP__;
+		poporconstop->OP_LABEL = StrToCharPointer(word); // tha variable's name is saved
 	}
-	_Stack_.push_back(poporconstop);
+	_Stack_[_Ops_Count_] = *poporconstop;
+	_Ops_Count_++;
 
-	_Stack_.push_back(condop); // only added after the addition of the 2 variables to be tested
+	_Stack_[_Ops_Count_] = *condop; // only added after the addition of the 2 variables to be tested
+	_Ops_Count_++;
 
 	// opens the if block
-	operation ifop;
-	ifop.OP_TYPE = __OP_IF__;
-	ifop.OP_LABEL = StrToCharPointer("If");
-	ifop.OP_VALUE = StrToCharPointer("If");
-	_Stack_.push_back(ifop);
+	operation* ifop = new operation;
+	ifop->OP_TYPE = __OP_IF__;
+	ifop->OP_LABEL = StrToCharPointer("If");
+	ifop->OP_VALUE = StrToCharPointer("If");
+	_Stack_[_Ops_Count_] = *ifop;
+	_Ops_Count_++;
 
 	// opens the then block
-	operation thenop;
-	thenop.OP_TYPE = __OP_THEN__;
-	thenop.OP_LABEL = StrToCharPointer("Then");
-	thenop.OP_VALUE = StrToCharPointer("Then");
-	_Stack_.push_back(thenop);
+	operation* thenop = new operation;
+	thenop->OP_TYPE = __OP_THEN__;
+	thenop->OP_LABEL = StrToCharPointer("Then");
+	thenop->OP_VALUE = StrToCharPointer("Then");
+	_Stack_[_Ops_Count_] = *thenop;
+	_Ops_Count_++;
 }
 
-string DiscoverBlockToClose(list<operation>& _Stack_) {
+string DiscoverBlockToClose() {
 	string closingBlock = "";
+	operation* op = NULL;
 
-	auto op = _Stack_.begin();
-	advance(op, _Stack_.size() - 1);
-	for (int i = _Stack_.size() - 1; i >= 0; i--) {
+	for (int i = _Ops_Count_ - 1; i >= 0; i--) {
+		op = &_Stack_[i];
 		if (!op->OP_BLOCK_CLOSED &&
 			(op->OP_TYPE == __OP_IF__ || op->OP_TYPE == __OP_WHILE__ || op->OP_TYPE == __OP_FOR__)
 		) {
@@ -516,8 +540,6 @@ string DiscoverBlockToClose(list<operation>& _Stack_) {
 			op->OP_BLOCK_CLOSED = true;
 			break;
 		}
-		op = _Stack_.begin();
-		advance(op, i);
 	}
 
 	return closingBlock;
@@ -552,12 +574,10 @@ int Test () {
 }
 
 /*		 FILE PARSER		*/
-list<operation> ParseFileToWasmStack (bool printStack = true)
-{
+void ParseFileToWasmStack (bool printStack = true) {
 	const regex r("((\\+|-)?[[:d:]]+)(\\.(([[:d:]]+)?))?");
 	fstream file("../../../sample2-multiple_types.cw", ios::in); // ios::out | ios::trunc | ios::app
 	short countElsif = 0;
-	list<operation> _Stack_; // the stack of programm operations
 
 	if (file.is_open()) {
 		string line = "";
@@ -583,58 +603,47 @@ list<operation> ParseFileToWasmStack (bool printStack = true)
 				/*				---	TYPE PUSH ---				*/
 
 				if (word == "int8") {
-					operation op = OpPush(line, word, countLines, __OP_INT8PUSH__);
-					_Stack_.push_back(op);
+					OpPush(line, word, countLines, __OP_INT8PUSH__, 1);
 				}
 
 				else if (word == "int16") {
-					operation op = OpPush(line, word, countLines, __OP_INT16PUSH__);
-					_Stack_.push_back(op);
+					OpPush(line, word, countLines, __OP_INT16PUSH__, 2);
 				}
 
 				else if (word == "int32" || word == "int") {
-					operation op = OpPush(line, word, countLines, __OP_INT32PUSH__);
-					_Stack_.push_back(op);
+					OpPush(line, word, countLines, __OP_INT32PUSH__, 4);
 				}
 
 				else if (word == "int64") {
-					operation op = OpPush(line, word, countLines, __OP_INT64PUSH__);
-					_Stack_.push_back(op);
+					OpPush(line, word, countLines, __OP_INT64PUSH__, 8);
 				}
 
 				else if (word == "int128") {
-					operation op = OpPush(line, word, countLines, __OP_INT128PUSH__);
-					_Stack_.push_back(op);
+					OpPush(line, word, countLines, __OP_INT128PUSH__, 16);
 				}
 
 				else if (word == "float16") {
-					operation op = OpPush(line, word, countLines, __OP_FLOAT16PUSH__);
-					_Stack_.push_back(op);
+					OpPush(line, word, countLines, __OP_FLOAT16PUSH__, 2);
 				}
 
 				else if (word == "float32" || word == "float") {
-					operation op = OpPush(line, word, countLines, __OP_FLOAT32PUSH__);
-					_Stack_.push_back(op);
+					OpPush(line, word, countLines, __OP_FLOAT32PUSH__, 4);
 				}
 
 				else if (word == "float64") {
-					operation op = OpPush(line, word, countLines, __OP_FLOAT64PUSH__);
-					_Stack_.push_back(op);
+					OpPush(line, word, countLines, __OP_FLOAT64PUSH__, 8);
 				}
 
 				else if (word == "float128") {
-					operation op = OpPush(line, word, countLines, __OP_FLOAT128PUSH__);
-					_Stack_.push_back(op);
+					OpPush(line, word, countLines, __OP_FLOAT128PUSH__, 16);
 				}
 
 				else if (word == "bool") {
-					operation op = OpPush(line, word, countLines, __OP_BOOLEANPUSH__);
-					_Stack_.push_back(op);
+					OpPush(line, word, countLines, __OP_BOOLEANPUSH__, 0);
 				}
 
 				else if (word == "var") {
-					operation op = OpPush(line, word, countLines, __OP_VARPUSH__);
-					_Stack_.push_back(op);
+					OpPush(line, word, countLines, __OP_VARPUSH__, 0);
 				}
 
 				/*****************************************************/
@@ -642,25 +651,27 @@ list<operation> ParseFileToWasmStack (bool printStack = true)
 				/*				---	KEYWORDS ---				*/
 
 				else if (word == "if") {
-					IfPush(_Stack_, line, word, countLines, r);
+					IfPush(line, word, countLines, r);
 				}
 
 				// need to iterate through the _Stack_ and discover which block isn't closed yet, then
 				// TODO: needs to check whether a block isn't closed till the end of the code to throw a compiler error
 				else if (word == "end") {
-					string closingBlock = DiscoverBlockToClose(_Stack_);
+					string closingBlock = DiscoverBlockToClose();
 
 					if (closingBlock == "If")
 					{
+						operation* endop = new operation;
+						endop->OP_TYPE = __OP_END__;
+						endop->OP_LABEL = StrToCharPointer("End");
+						endop->OP_VALUE = StrToCharPointer("End");
+
 						// for each 'elsif' before the 'end' token, the compiler must add another 2 end-closures -> '))'
 						for (int i = 0; i < countElsif; i++) {
-							operation endop;
-							endop.OP_TYPE = __OP_END__;
-							endop.OP_LABEL = StrToCharPointer("End");
-							endop.OP_VALUE = StrToCharPointer("End");
-
-							_Stack_.push_back(endop);
-							_Stack_.push_back(endop);
+							_Stack_[_Ops_Count_] = *endop;
+							_Ops_Count_++;
+							_Stack_[_Ops_Count_] = *endop;
+							_Ops_Count_++;
 						}
 						countElsif = 0;
 
@@ -668,13 +679,10 @@ list<operation> ParseFileToWasmStack (bool printStack = true)
 						//		a. If + Then
 						//		b. Else + its If
 						// Conclusion: always has to close 2 times (for If-Elsif-Else-blocks) -> '))'
-						operation endop;
-						endop.OP_TYPE = __OP_END__;
-						endop.OP_LABEL = StrToCharPointer("End");
-						endop.OP_VALUE = StrToCharPointer("End");
-
-						_Stack_.push_back(endop);
-						_Stack_.push_back(endop);
+						_Stack_[_Ops_Count_] = *endop;
+						_Ops_Count_++;
+						_Stack_[_Ops_Count_] = *endop;
+						_Ops_Count_++;
 					}
 					else if (closingBlock == "While") {
 						// TODO
@@ -686,38 +694,42 @@ list<operation> ParseFileToWasmStack (bool printStack = true)
 
 				else if (word == "else") {
 					// Else-statements don't close the If-statements before them, but they must close the Then-blocks
-					operation op;
-					op.OP_TYPE = __OP_END__;
-					op.OP_LABEL = StrToCharPointer("End");
-					op.OP_VALUE = StrToCharPointer("End");
-					_Stack_.push_back(op);
+					operation* op = new operation;
+					op->OP_TYPE = __OP_END__;
+					op->OP_LABEL = StrToCharPointer("End");
+					op->OP_VALUE = StrToCharPointer("End");
+					_Stack_[_Ops_Count_] = *op;
+					_Ops_Count_++;
 
-					operation elseop;
-					elseop.OP_TYPE = __OP_ELSE__;
-					elseop.OP_LABEL = StrToCharPointer("Else");
-					elseop.OP_VALUE = StrToCharPointer("Else");
-					_Stack_.push_back(elseop);
+					operation* elseop = new operation;
+					elseop->OP_TYPE = __OP_ELSE__;
+					elseop->OP_LABEL = StrToCharPointer("Else");
+					elseop->OP_VALUE = StrToCharPointer("Else");
+					_Stack_[_Ops_Count_] = *elseop;
+					_Ops_Count_++;
 				}
 
 				else if (word == "elsif") {
 					countElsif++; // add 1 to the counter
 
 					// firstly closes the Then-block before
-					operation op;
-					op.OP_TYPE = __OP_END__;
-					op.OP_LABEL = StrToCharPointer("End");
-					op.OP_VALUE = StrToCharPointer("End");
-					_Stack_.push_back(op);
+					operation* op = new operation;
+					op->OP_TYPE = __OP_END__;
+					op->OP_LABEL = StrToCharPointer("End");
+					op->OP_VALUE = StrToCharPointer("End");
+					_Stack_[_Ops_Count_] =  *op;
+					_Ops_Count_++;
 
 					// then opens the Else-block inside the If-statement
-					operation elseop;
-					elseop.OP_TYPE = __OP_ELSE__;
-					elseop.OP_LABEL = StrToCharPointer("Else");
-					elseop.OP_VALUE = StrToCharPointer("Else");
-					_Stack_.push_back(elseop);
+					operation* elseop = new operation;
+					elseop->OP_TYPE = __OP_ELSE__;
+					elseop->OP_LABEL = StrToCharPointer("Else");
+					elseop->OP_VALUE = StrToCharPointer("Else");
+					_Stack_[_Ops_Count_] = *elseop;
+					_Ops_Count_++;
 
 					// then creates a new If-like operations sequence
-					IfPush(_Stack_, line, word, countLines, r);
+					IfPush(line, word, countLines, r);
 				}
 
 				/*****************************************************/
@@ -725,9 +737,9 @@ list<operation> ParseFileToWasmStack (bool printStack = true)
 				/*				---	OTHER ---				*/
 
 				else if (word == "println") {
-					operation op;
-					op.OP_TYPE = __OP_PRINTLN__;
-					op.OP_LABEL = StrToCharPointer("println");
+					operation* op;
+					op->OP_TYPE = __OP_PRINTLN__;
+					op->OP_LABEL = StrToCharPointer("println");
 
 					word = GetToken(line, ' ');
 					if (word == "") {
@@ -741,14 +753,15 @@ list<operation> ParseFileToWasmStack (bool printStack = true)
 							cout << "--- syntax error in line (" << countLines << "): '" << line << "'; <-- text variable unclosed.\n";
 							exit(1);
 						}
-						op.OP_VALUE = StrToCharPointer(word);
-						op.OP_TEXTFLAG = true;
+						op->OP_VALUE = StrToCharPointer(word);
+						op->OP_TEXTFLAG = true;
 					}
 					else {
-						op.OP_VALUE = StrToCharPointer(word);
+						op->OP_VALUE = StrToCharPointer(word);
 					}
 
-					_Stack_.push_back(op);
+					_Stack_[_Ops_Count_] = *op;
+					_Ops_Count_++;
 				}
 
 				/*****************************************************/
@@ -761,132 +774,145 @@ list<operation> ParseFileToWasmStack (bool printStack = true)
 
 				/*			---	VAR REATTRIBUTION ---			*/
 				else {
-					operation varDefinition;
-					auto op = _Stack_.begin();
-					for (int i = 0; i < _Stack_.size(); i++) {
-						if (op->OP_LABEL != 0) {
+					operation* varDefinition = NULL;
+					for (int i = 0; i < _Ops_Count_; i++) {
+						operation* op = &_Stack_[i];
+						if (op->OP_LABEL != NULL) {
 							if (word == op->OP_LABEL) {
-								varDefinition = *op;
+								varDefinition = &*op;
 								break;
 							}
 						}
-						advance(op, 1);
 					}
-					if (varDefinition.OP_LABEL == 0) {
+					if (varDefinition == NULL) {
 						cout << "--- compile error in line (" << countLines + 1 << "): '" << line << "'; <-- variable name '" << word << "' not declared.\n";
 						exit(1);
 					}
 
-					operation varsetop;
-					varsetop.OP_TYPE = __OP_VARSETVAL__;
-					string label = varDefinition.OP_LABEL;
-					varsetop.OP_LABEL = StrToCharPointer(label);
+					operation* varsetop = new operation;
+					varsetop->OP_TYPE = __OP_VARSETVAL__;
+					string label = varDefinition->OP_LABEL;
+					varsetop->OP_LABEL = StrToCharPointer(label);
 
 					word = GetToken(line, ' '); // reads the value to reset
 					if (word == "") {
-						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected value to be set on variable '" << varsetop.OP_LABEL << "'.\n";
+						cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected value to be set on variable '" << varsetop->OP_LABEL << "'.\n";
 						exit(1);
 					}
 
 					// tests if it's either a generic var reattribution or another type
-					if (varDefinition.OP_TYPE == __OP_VARPUSH__) { // generic 'var', any value or type accepted
+					if (varDefinition->OP_TYPE == __OP_VARPUSH__) { // generic 'var', any value or type accepted
 						if (word[0] == '"' || word[0] == '\'') { // if it's a text value...
 							word = GetVarchar(line, word);
 							if (word == "") {
 								cout << "--- syntax error in line (" << countLines << "): '" << line << "'; <-- text variable unclosed.\n";
 								exit(1);
 							}
-							varsetop.OP_VALUE = StrToCharPointer(word);
-							varsetop.OP_TEXTFLAG = true;		// forces the var to be a text one, if it wasn't
+							varsetop->OP_VALUE = StrToCharPointer(word);
+							varsetop->OP_TEXTFLAG = true;		// forces the var to be a text one, if it wasn't
 						}
 						else if (word == "true" || word == "false" || word == "null") { // for either boolean values or nullables
-							varsetop.OP_VALUE = new char[1];
-							varsetop.OP_VALUE[0] = word == "true" ? 1 : 0;
-							varsetop.OP_TEXTFLAG = false;		// forces the var to not be a text one, if it was
+							varsetop->OP_VALUE = new char[1];
+							varsetop->OP_VALUE[0] = word == "true" ? 1 : 0;
+							varsetop->OP_TEXTFLAG = false;		// forces the var to not be a text one, if it was
 						}
-						else { // treats as numeric value
+						else { // treats as 128bit numeric value
+							varsetop->OP_VALUE = new char[16];
 							if (word.find(".") != string::npos) {
 								// it's a Float value
-								t_float128 float128 = StrToFloat128(word);
-								strcpy(varsetop.OP_VALUE, float128.val);
+								t_float128* float128 = StrToFloat128(word);
+								*varsetop->OP_VALUE = *float128->val;
 							}
 							else {
 								// Integer
-								t_int128 int128 = StrToInt128(word);
-								strcpy(varsetop.OP_VALUE, int128.val);
+								t_int128* int128 = StrToInt128(word);
+								*varsetop->OP_VALUE = *int128->val;
 							}
-							varsetop.OP_TEXTFLAG = false;		// forces the var to not be a text one, if it was
+							varsetop->OP_TEXTFLAG = false;		// forces the var to not be a text one, if it was
 						}
 					}
 					else { // other types have to be reattributed accordingly
 						if (word[0] == '"' || word[0] == '\'') { // if it is a generic 'var' when reattributing to another type...
-							cout << "--- compilation error in line (" << countLines << "): '" << line << "'; <-- type mismatch on reset variable '" << varDefinition.OP_LABEL << "'.\n";
+							cout << "--- compilation error in line (" << countLines << "): '" << line << "'; <-- type mismatch on reset variable '" << varDefinition->OP_LABEL << "'.\n";
 							exit(1);
 						}
-						varsetop.OP_TEXTFLAG = false; // forces the variable to not be a text one
+						varsetop->OP_TEXTFLAG = false; // forces the variable to not be a text one
 
-						if (varDefinition.OP_TYPE == __OP_BOOLEANPUSH__) { // forces any number to boolean
-							varsetop.OP_VALUE = new char[1];
-							varsetop.OP_VALUE[0] = word == "true" || stod(word) > 0 ? 1 : 0;
+						if (varDefinition->OP_TYPE == __OP_BOOLEANPUSH__) { // forces any number to boolean
+							varsetop->OP_VALUE = new char[1];
+							varsetop->OP_VALUE[0] = word == "true" || stod(word) > 0 ? 1 : 0;
 						}
 
 						// NUMBER REATTRIBUTIONS
 						else {
+							if (word == "null") {
+								word = "0";
+							}
 
 							// INTEGER
-							if (varDefinition.OP_TYPE == __OP_INT8PUSH__) {
+							if (varDefinition->OP_TYPE == __OP_INT8PUSH__) {
 								t_int8 int8;
 								int8.i = (char)stod(word);
-								varsetop.OP_VALUE = int8.c;
+								varsetop->OP_VALUE = new char[1];
+								varsetop->OP_VALUE[0] = *int8.c;
 							}
-							else if (varDefinition.OP_TYPE == __OP_INT16PUSH__) {
+							else if (varDefinition->OP_TYPE == __OP_INT16PUSH__) {
 								t_int16 int16;
 								int16.i = (short)stod(word);
-								varsetop.OP_VALUE = int16.c;
+								varsetop->OP_VALUE = new char[2];
+								*varsetop->OP_VALUE = *int16.c;
 							}
-							else if (varDefinition.OP_TYPE == __OP_INT32PUSH__) {
+							else if (varDefinition->OP_TYPE == __OP_INT32PUSH__) {
 								t_int32 int32;
 								int32.i = (int)stod(word);
-								varsetop.OP_VALUE = int32.c;
+								varsetop->OP_VALUE = new char[4];
+								*varsetop->OP_VALUE = *int32.c;
 							}
-							else if (varDefinition.OP_TYPE == __OP_INT64PUSH__) {
+							else if (varDefinition->OP_TYPE == __OP_INT64PUSH__) {
 								t_int64 int64;
 								int64.i = (long long)stod(word);
-								varsetop.OP_VALUE = int64.c;
+								varsetop->OP_VALUE = new char[8];
+								*varsetop->OP_VALUE = *int64.c;
 							}
-							else if (varDefinition.OP_TYPE == __OP_INT128PUSH__) {
-								t_int128 int128 = StrToInt128(word);
-								varsetop.OP_VALUE = int128.val;
+							else if (varDefinition->OP_TYPE == __OP_INT128PUSH__) {
+								t_int128* int128 = StrToInt128(word);
+								varsetop->OP_VALUE = new char[16];
+								*varsetop->OP_VALUE = *int128->val;
 							}
 							// FLOAT
-							else if (varDefinition.OP_TYPE == __OP_FLOAT16PUSH__) {
+							else if (varDefinition->OP_TYPE == __OP_FLOAT16PUSH__) {
 								t_float16 float16;
 								float16.f = (float)StrToLongDouble(word);
-								varsetop.OP_VALUE = float16.c.p2;
+								varsetop->OP_VALUE = new char[2];
+								*varsetop->OP_VALUE = *float16.c.p2;
 							}
-							else if (varDefinition.OP_TYPE == __OP_FLOAT32PUSH__) {
+							else if (varDefinition->OP_TYPE == __OP_FLOAT32PUSH__) {
 								t_float32 float32;
 								float32.f = (float)StrToLongDouble(word);
-								varsetop.OP_VALUE = float32.c;
+								varsetop->OP_VALUE = new char[4];
+								*varsetop->OP_VALUE = *float32.c;
 							}
-							else if (varDefinition.OP_TYPE == __OP_FLOAT64PUSH__) {
+							else if (varDefinition->OP_TYPE == __OP_FLOAT64PUSH__) {
 								t_float64 float64;
 								float64.f = (long double)StrToLongDouble(word);
-								varsetop.OP_VALUE = float64.c;
+								varsetop->OP_VALUE = new char[8];
+								*varsetop->OP_VALUE = *float64.c;
 							}
-							else if (varDefinition.OP_TYPE == __OP_FLOAT128PUSH__) {
-								t_float128 float128 = StrToFloat128(word);
-								varsetop.OP_VALUE = float128.val;
+							else if (varDefinition->OP_TYPE == __OP_FLOAT128PUSH__) {
+								t_float128* float128 = StrToFloat128(word);
+								varsetop->OP_VALUE = new char[16];
+								*varsetop->OP_VALUE = *float128->val;
 							}
 							// UNREACHABLE
 							else {
-								cout << "--- compilation error in line (" << countLines << "): '" << line << "'; <-- type mismatch on reset variable '" << varDefinition.OP_LABEL << "'.\n";
+								cout << "--- compilation error in line (" << countLines << "): '" << line << "'; <-- type mismatch on reset variable '" << varDefinition->OP_LABEL << "'.\n";
 								exit(1);
 							}
 						}
 					}
 
-					_Stack_.push_back(varsetop);
+					_Stack_[_Ops_Count_] = *varsetop;
+					_Ops_Count_++;
 				}
 				/*****************************************************/
 
@@ -910,8 +936,8 @@ list<operation> ParseFileToWasmStack (bool printStack = true)
 
 		if (printStack) {
 			cout << "Stack: \n\n";
-			auto op = _Stack_.begin();
-			for (int i = 0; i < _Stack_.size(); i++) {
+			for (int i = 0; i < _Ops_Count_; i++) {
+				operation* op = &_Stack_[i];
 				cout << "   #" << i << "   OP_TYPE = " << op->OP_TYPE << "   OP_LABEL = " << op->OP_LABEL;
 				cout << "   OP_VALUE = " << op->OP_VALUE << "\n\n";
 				advance(op, 1);
@@ -926,8 +952,6 @@ list<operation> ParseFileToWasmStack (bool printStack = true)
 	}
 
 	cout << "file compiled successfully!\n\n";
-
-	return _Stack_;
 }
 
 /*		 MAIN PROGRAM		*/
