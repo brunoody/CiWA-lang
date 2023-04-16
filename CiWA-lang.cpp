@@ -345,7 +345,8 @@ string GetVarchar(string line, string token, long lineNumber) {
 		ret = line.substr(start+1, countChars-1);
 
 		// if it's a v-string, the 'v' character comes together
-		if (line[countChars] == 'v') {
+		unsigned long itPos = GetStringIterator();
+		if (line[itPos] == 'v') {
 			MoveStringIterator(1);
 			ret.insert(0, "<v-string>");
 			ret.append("</v-string>");
@@ -362,7 +363,7 @@ bool IsVString(string* text) {
 	size_t pos2 = text->find("</v-string>"); // 11 characters-count
 	if (pos1 != string::npos && pos2 != string::npos) {
 		text->replace(pos1, 10, "");
-		text->replace(pos2, 11, "");
+		text->replace(pos2-10, 11, "");
 
 		return true;
 	}
@@ -373,7 +374,7 @@ std::tuple<long, long> VStringHasVariable(string text) {
 	size_t pos1 = text.find("{");
 	size_t pos2 = text.find("}");
 	if (pos1 != string::npos && pos2 != string::npos) {
-		return std::tuple<long, long>{pos1, pos2+1 -pos1};
+		return std::tuple<long, long>{pos1, pos2+1-pos1};
 	}
 	return std::tuple<long, long> {-1, -1};
 }
@@ -417,7 +418,7 @@ void InterpolateVString(string line, long lineNumber, string* text) {
 		// the text will be replaced from pos1 with size 'len' to the actual value of the variable, if found on the _Stack_
 		long pos1 = std::get<0>(variable);
 		long len = std::get<1>(variable);
-		string label = text->substr(pos1 + 1, len - 1);
+		string label = text->substr(pos1 + 1, len - 2);
 		Trim(&label);
 
 		operation* varlastvalop = FindOperationByLabel(label, true);
@@ -929,7 +930,7 @@ void ParseFileToWasmStack (bool printStack = false) {
 				#pragma region LANGUAGE PRE-BUILT FUNCTIONS
 
 				else if (word == "println") {
-					operation* op;
+					operation* op = new operation;
 					op->OP_TYPE = __OP_PRINTLN__;
 					op->OP_LABEL = StrToCharPointer("println");
 
@@ -1119,13 +1120,15 @@ void ParseFileToWasmStack (bool printStack = false) {
 				#pragma endregion
 
 				// automatically jumps to the next line when encounters a comment
-				long itPos = GetStringIterator();
-				string subline = line.substr(itPos, line.size()-itPos);
-				TrimLeft(&subline);
-				if (subline[0] == ';') {
-					break;
+				unsigned long itPos = GetStringIterator();
+				if (itPos < line.size()) {
+					string subline = line.substr(itPos, line.size()-itPos);
+					TrimLeft(&subline);
+					if (subline[0] == ';') {
+						break;
+					}
 				}
-
+				
 				word = GetToken(line, ' ');
 			}
 		}

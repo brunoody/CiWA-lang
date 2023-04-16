@@ -1,6 +1,9 @@
 
 int i 0
 
+var str "Hello and welcome to my third test!"
+println "{str}"v
+
 ;; while loop
 
 while i < 100
