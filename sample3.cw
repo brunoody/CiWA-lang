@@ -11,7 +11,7 @@ end
 
 ;; for loop
 
-for 0:100 => int j
+for 0:100 int j =>
 	;; v-string : string with variables inside
 	println "value = {j}"v
 end

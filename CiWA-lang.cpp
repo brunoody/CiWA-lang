@@ -1,11 +1,27 @@
 ﻿//
 // CiWA-lang.cpp: Main file
+// TODO : work with the v-string syntax
 //
 
 #include "./CiWA-lang.h"
 using namespace std;
 
-/*				  GLOBALS				*/
+#pragma region IOTA (ENUM-LIKE)
+
+int _iota = 0;
+int IOTA(bool reset = false) {
+	if (reset) {
+		_iota = 0;
+	}
+	else {
+		_iota++;
+	}
+	return _iota;
+}
+
+#pragma endregion
+
+#pragma region GLOBALS
 
 typedef struct operation {
 	int	  OP_TYPE = -1;
@@ -21,26 +37,13 @@ typedef struct float_parsed {
 	unsigned char floatPoints = -1;
 };
 
-#define __MAXOPS__ 1024
+#define __MAXOPS__ 4096
 int _Ops_Count_ = 0;
 operation _Stack_[__MAXOPS__]; // the stack of programm operations
 
-/***************************************/
+#pragma endregion
 
-/*		ENUMERATION FUNC      */
-int iota = 0;
-int IOTA(bool reset = false) {
-	if (reset) {
-		iota = 0;
-	}
-	else {
-		iota++;
-	}
-	return iota;
-}
-/***************************************/
-
-/*		CONSTANTS		*/
+#pragma region CONSTANTS
 
 /*	TYPE OPERATIONS	 */
 const short __OP_INT8PUSH__ =			IOTA(true);
@@ -56,6 +59,7 @@ const short __OP_BOOLEANPUSH__ =		IOTA();
 const short __OP_VARPUSH__ =			IOTA();
 const short __OP_VARPOP__ =				IOTA();
 const short __OP_CONSTDEF__ =			IOTA();
+const short __OP_MEMORY__ = 			IOTA();
 const short __OP_VARSETVAL__ =			IOTA();
 
 /*	 COMMANDS	*/
@@ -65,6 +69,7 @@ const short __OP_ELSE__ =				IOTA();
 const short __OP_ELSIF__ =				IOTA();
 const short __OP_WHILE__ =				IOTA();
 const short __OP_FOR__ =				IOTA();
+const short __OP_LOOP__ =				IOTA();
 const short __OP_END__ =				IOTA();
 const short __OP_PRINTLN__ =			IOTA();
 
@@ -76,9 +81,9 @@ const short __OP_GREATEROREQUAL__ =		IOTA();
 const short __OP_LESS__ =				IOTA();
 const short __OP_LESSOREQUAL__ =		IOTA();
 
-/***************************************/
+#pragma endregion
 
-/*	 TYPE DEFINITIONS	*/
+#pragma region TYPE DEFINITIONS
 
 typedef union t_int8 {
 	char i;
@@ -149,11 +154,11 @@ t_float128 CreateFloat128() {
 	hi_lo.s_val.f_hi = hi_lo.s_val.f_lo = 0;
 	return hi_lo;
 }
-/***************************************/
 
-/*			UTILLS			*/
+#pragma endregion
 
-/*		 GENERAL UTILS		*/
+#pragma region GENERAL UTILS
+
 unsigned long itIndex = 0;
 string GetToken(string str, char delim, bool resetItIndex = false) {
 	if (resetItIndex) {
@@ -210,7 +215,7 @@ unsigned char* StrToUnsignedCharPointer(string str, bool addNullChar = false) {
 }
 
 short floatPoints = 0;
-float_parsed ParseFloat(string str) {
+float_parsed ParseStrToFloat(string str) {
 	short pointIndex = 0;
 	for (int i = 0; i <= str.size(); i++) {
 		if (str[i] == '.') {
@@ -227,8 +232,8 @@ float_parsed ParseFloat(string str) {
 }
 
 long double StrToLongDouble(string str, short shiftBits = 0) {
-	long long longLongPart = stod(ParseFloat(str).intPart);
-	long long floatPartAsLongLong = stod(ParseFloat(str).floatPart);
+	long long longLongPart = stod(ParseStrToFloat(str).intPart);
+	long long floatPartAsLongLong = stod(ParseStrToFloat(str).floatPart);
 	if (shiftBits > 0) {
 		longLongPart = longLongPart >> shiftBits & 0xFF;
 		floatPartAsLongLong = floatPartAsLongLong >> shiftBits & 0xFF;
@@ -279,10 +284,10 @@ t_int128* StrToInt128(string str) {
 }
 
 t_float128* StrToFloat128(string str) {
-	t_int64 iPart; iPart.i = stod(ParseFloat(str).intPart);
-	t_int64 fPart; fPart.i = stod(ParseFloat(str).floatPart);
+	t_int64 iPart; iPart.i = stod(ParseStrToFloat(str).intPart);
+	t_int64 fPart; fPart.i = stod(ParseStrToFloat(str).floatPart);
 	double divisor = 10.0;
-	for (int i = 1; i < ParseFloat(str).floatPoints; i++) {
+	for (int i = 1; i < ParseStrToFloat(str).floatPoints; i++) {
 		divisor = divisor * 10.0;
 	}
 	t_float64 f64;
@@ -328,7 +333,10 @@ string GetVarchar(string line, string token) {
 	return "";
 }
 
-/*		 OPERATION UTILS		*/
+#pragma endregion
+
+#pragma region OPERATION UTILS
+
 void OpPush(string line, string word, long lineNumber, short OP_TYPE, short size) {
 	operation op;
 	op.OP_TYPE = OP_TYPE;
@@ -432,7 +440,7 @@ void OpPush(string line, string word, long lineNumber, short OP_TYPE, short size
 	_Ops_Count_++;
 }
 
-void IfPush(string line, string word, long countLines, regex r) {
+void IfPush(string line, string word, long countLines) {
 	operation* popop = new operation;
 	popop->OP_TYPE = __OP_VARPOP__;
 	word = GetToken(line, ' '); // reads the variable's name
@@ -494,15 +502,47 @@ void IfPush(string line, string word, long countLines, regex r) {
 		cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected variable name or a constant for conditional test definition.\n";
 		exit(1);
 	}
-	// defines if it is a number or a variable's name
-	if (regex_match(word, r)) {
-		poporconstop->OP_TYPE = __OP_CONSTDEF__;
-		poporconstop->OP_LABEL = StrToCharPointer("Const");
+	// defines if the word token is a text value, a number or a variable's name
+	if(word[0] == '"' || word[0] == '\'') {
+		string token = GetVarchar(line, word);
+		if(token == "") {
+			cout << "--- syntax error in line (" << countLines << "): '" << line << "'; <-- text variable unclosed.\n";
+			exit(1);
+		}
+		// TODO : string constant case - create a memory space at the start of the _Stack_ to be referenced later on with its const index
+		poporconstop->OP_TYPE = __OP_MEMORY__;
+		poporconstop->OP_LABEL = StrToCharPointer("Memory");
 		poporconstop->OP_VALUE = StrToCharPointer(word); // the const value is set
+		poporconstop->OP_TEXTFLAG = true;
 	}
 	else {
-		poporconstop->OP_TYPE = __OP_VARPOP__;
-		poporconstop->OP_LABEL = StrToCharPointer(word); // tha variable's name is saved
+		bool isNumber = true;
+		bool foundPoint = false;
+		for(int i = 0; i < word.length(); i++) {
+			char c = word[i];
+			if(c == '.' && !foundPoint) {
+				foundPoint = true;
+			}
+			else if (c == '.' && foundPoint) {
+				isNumber = false;
+				break;
+			}
+
+			if(c != '.' && std::isdigit(c) == 0){
+				isNumber = false;
+				break;
+			}
+		}
+
+		if(isNumber) {
+			poporconstop->OP_TYPE = __OP_CONSTDEF__;
+			poporconstop->OP_LABEL = StrToCharPointer("Const");
+			poporconstop->OP_VALUE = StrToCharPointer(word); // the const value is set
+		}
+		else{
+			poporconstop->OP_TYPE = __OP_VARPOP__;
+			poporconstop->OP_LABEL = StrToCharPointer(word); // the variable's name is saved
+		}
 	}
 	_Stack_[_Ops_Count_] = *poporconstop;
 	_Ops_Count_++;
@@ -545,9 +585,10 @@ string DiscoverBlockToClose() {
 	return closingBlock;
 }
 
-/***************************************/
+#pragma endregion
 
-/*		   TEST MAIN		*/
+#pragma region TEST MAIN FUNCTION
+
 int Test () {
 
 	cout << " Size of Base Struct = " << sizeof(s__int128__) << "\n";
@@ -573,10 +614,12 @@ int Test () {
 	return 0;
 }
 
-/*		 FILE PARSER		*/
+#pragma endregion
+
+#pragma region PARSER
+
 void ParseFileToWasmStack (bool printStack = true) {
-	const regex r("((\\+|-)?[[:d:]]+)(\\.(([[:d:]]+)?))?");
-	fstream file("../../../sample2-multiple_types.cw", ios::in); // ios::out | ios::trunc | ios::app
+	fstream file("../../../sample3.cw", ios::in); // ios::out | ios::trunc | ios::app
 	short countElsif = 0;
 
 	if (file.is_open()) {
@@ -600,7 +643,7 @@ void ParseFileToWasmStack (bool printStack = true) {
 					break;
 				}
 
-				/*				---	TYPE PUSH ---				*/
+				#pragma region TYPE PUSH
 
 				if (word == "int8") {
 					OpPush(line, word, countLines, __OP_INT8PUSH__, 1);
@@ -610,11 +653,11 @@ void ParseFileToWasmStack (bool printStack = true) {
 					OpPush(line, word, countLines, __OP_INT16PUSH__, 2);
 				}
 
-				else if (word == "int32" || word == "int") {
+				else if (word == "int32") {
 					OpPush(line, word, countLines, __OP_INT32PUSH__, 4);
 				}
 
-				else if (word == "int64") {
+				else if (word == "int64" || word == "int") {
 					OpPush(line, word, countLines, __OP_INT64PUSH__, 8);
 				}
 
@@ -626,11 +669,11 @@ void ParseFileToWasmStack (bool printStack = true) {
 					OpPush(line, word, countLines, __OP_FLOAT16PUSH__, 2);
 				}
 
-				else if (word == "float32" || word == "float") {
+				else if (word == "float32") {
 					OpPush(line, word, countLines, __OP_FLOAT32PUSH__, 4);
 				}
 
-				else if (word == "float64") {
+				else if (word == "float64" || word == "float") {
 					OpPush(line, word, countLines, __OP_FLOAT64PUSH__, 8);
 				}
 
@@ -646,50 +689,16 @@ void ParseFileToWasmStack (bool printStack = true) {
 					OpPush(line, word, countLines, __OP_VARPUSH__, 0);
 				}
 
-				/*****************************************************/
+				#pragma endregion
 
-				/*				---	KEYWORDS ---				*/
+				#pragma region KEYWORDS
+
+				else if (word == "=>") {
+					continue;
+				} 
 
 				else if (word == "if") {
-					IfPush(line, word, countLines, r);
-				}
-
-				// need to iterate through the _Stack_ and discover which block isn't closed yet, then
-				// TODO: needs to check whether a block isn't closed till the end of the code to throw a compiler error
-				else if (word == "end") {
-					string closingBlock = DiscoverBlockToClose();
-
-					if (closingBlock == "If")
-					{
-						operation* endop = new operation;
-						endop->OP_TYPE = __OP_END__;
-						endop->OP_LABEL = StrToCharPointer("End");
-						endop->OP_VALUE = StrToCharPointer("End");
-
-						// for each 'elsif' before the 'end' token, the compiler must add another 2 end-closures -> '))'
-						for (int i = 0; i < countElsif; i++) {
-							_Stack_[_Ops_Count_] = *endop;
-							_Ops_Count_++;
-							_Stack_[_Ops_Count_] = *endop;
-							_Ops_Count_++;
-						}
-						countElsif = 0;
-
-						// Each End-statement has to close one of either options:
-						//		a. If + Then
-						//		b. Else + its If
-						// Conclusion: always has to close 2 times (for If-Elsif-Else-blocks) -> '))'
-						_Stack_[_Ops_Count_] = *endop;
-						_Ops_Count_++;
-						_Stack_[_Ops_Count_] = *endop;
-						_Ops_Count_++;
-					}
-					else if (closingBlock == "While") {
-						// TODO
-					}
-					else if (closingBlock == "For") {
-						// TODO
-					}
+					IfPush(line, word, countLines);
 				}
 
 				else if (word == "else") {
@@ -729,12 +738,93 @@ void ParseFileToWasmStack (bool printStack = true) {
 					_Ops_Count_++;
 
 					// then creates a new If-like operations sequence
-					IfPush(line, word, countLines, r);
+					IfPush(line, word, countLines);
 				}
 
-				/*****************************************************/
+				else if (word == "while") {
+					// TODO : add the boolean test right after in the WebAssembly code - the test may have a const push or a local.get
+					// TODO : also add the 'br 0' statement at the end of the loop to return to the start
+					operation* blockop = new operation;
+					blockop->OP_TYPE = __OP_WHILE__;
+					blockop->OP_LABEL = StrToCharPointer("While-block");
+					blockop->OP_VALUE = StrToCharPointer("Block");
+					_Stack_[_Ops_Count_] = *blockop;
+					_Ops_Count_++;
 
-				/*				---	OTHER ---				*/
+					operation* loopop = new operation;
+					loopop->OP_TYPE = __OP_LOOP__;
+					loopop->OP_LABEL = StrToCharPointer("While-loop");
+					loopop->OP_VALUE = StrToCharPointer("Loop");
+					_Stack_[_Ops_Count_] = *loopop;
+					_Ops_Count_++;
+				}
+
+				else if (word == "for") {
+					// TODO : add the boolean test right after in the WebAssembly code - the test may have a const push or a local.get
+					// TODO : in a For loop, it will be needed to add the variable increment/decrement at the end of the loop
+					// TODO : also add the 'br 0' statement at the end of the loop to return to the start
+					operation* blockop = new operation;
+					blockop->OP_TYPE = __OP_FOR__;
+					blockop->OP_LABEL = StrToCharPointer("For-block");
+					blockop->OP_VALUE = StrToCharPointer("Block");
+					_Stack_[_Ops_Count_] = *blockop;
+					_Ops_Count_++;
+
+					operation* loopop = new operation;
+					loopop->OP_TYPE = __OP_LOOP__;
+					loopop->OP_LABEL = StrToCharPointer("For-loop");
+					loopop->OP_VALUE = StrToCharPointer("Loop");
+					_Stack_[_Ops_Count_] = *loopop;
+					_Ops_Count_++;
+				}
+
+				// need to iterate through the _Stack_ and discover which block isn't closed yet, then
+				// TODO : needs to check whether a block isn't closed till the end of the code to throw a compiler error
+				//		- maybe do this in a second step, iterating through the _Stack_
+				else if (word == "end") {
+					string closingBlock = DiscoverBlockToClose();
+
+					if (closingBlock == "If") {
+						operation* endop = new operation;
+						endop->OP_TYPE = __OP_END__;
+						endop->OP_LABEL = StrToCharPointer("End");
+						endop->OP_VALUE = StrToCharPointer("End");
+
+						// for each 'elsif' before the 'end' token, the compiler must add another 2 end-closures -> '))'
+						for (int i = 0; i < countElsif; i++) {
+							_Stack_[_Ops_Count_] = *endop;
+							_Ops_Count_++;
+							_Stack_[_Ops_Count_] = *endop;
+							_Ops_Count_++;
+						}
+						countElsif = 0;
+
+						// Each End-statement has to close one of either options:
+						//		a. If + Then
+						//		b. Else + its If
+						// Conclusion: always has to close 2 times (for If-Elsif-Else-blocks) -> '))'
+						_Stack_[_Ops_Count_] = *endop;
+						_Ops_Count_++;
+						_Stack_[_Ops_Count_] = *endop;
+						_Ops_Count_++;
+					}
+					else if (closingBlock == "While" || closingBlock == "For") {
+						// While and For loops are made with (block (loop ...)) structure, though to close them is just needed to add 2 end-closures -> '))' to the _Stack_
+						operation* endop = new operation;
+						endop->OP_TYPE = __OP_END__;
+						endop->OP_LABEL = StrToCharPointer("End");
+						endop->OP_VALUE = StrToCharPointer("End");
+
+						_Stack_[_Ops_Count_] = *endop;
+						_Ops_Count_++;
+						_Stack_[_Ops_Count_] = *endop;
+						_Ops_Count_++;
+					}
+				}
+
+				#pragma endregion
+
+				#pragma region LANGUAGE PRE-BUILT FUNCTIONS
 
 				else if (word == "println") {
 					operation* op;
@@ -764,15 +854,15 @@ void ParseFileToWasmStack (bool printStack = true) {
 					_Ops_Count_++;
 				}
 
-				/*****************************************************/
+				#pragma endregion
+
+                #pragma region VAR TYPE REATTRIBUTION
 
 				/*
 					[X] tries to find the name in the programm operations
 					[X] if it doesn't: exits program with code 1 and saying that used variable without declaring it first
 					[X] otherwise goes ahead and updates the variable's value - needs to be a new operation
 				*/
-
-				/*			---	VAR REATTRIBUTION ---			*/
 				else {
 					operation* varDefinition = NULL;
 					for (int i = 0; i < _Ops_Count_; i++) {
@@ -817,8 +907,28 @@ void ParseFileToWasmStack (bool printStack = true) {
 							varsetop->OP_TEXTFLAG = false;		// forces the var to not be a text one, if it was
 						}
 						else { // treats as 128bit numeric value
+							bool isNumber = true;
+							for (int i = 0; i < word.length(); i++) {
+								char c = word[i];
+								if (c != '.' && std::isdigit(c) == 0) {
+									isNumber = false;
+									break;
+								}
+							}
+							if (!isNumber) {
+								cout << "--- syntax error in line (" << countLines << "): '" << line << "'; <-- number value expected.\n";
+								exit(1);
+							}
+
 							varsetop->OP_VALUE = new char[16];
-							if (word.find(".") != string::npos) {
+							size_t posI = word.find(".");
+							if (posI != string::npos) {
+								string sub = word.substr(posI, word.size() - posI);
+								if (sub.find('.') != string::npos) {
+									cout << "--- syntax error in line (" << countLines << "): '" << line << "'; <-- floating point numbers should have only 1 point ('.').\n";
+									exit(1);
+								}
+
 								// it's a Float value
 								t_float128* float128 = StrToFloat128(word);
 								*varsetop->OP_VALUE = *float128->val;
@@ -914,7 +1024,8 @@ void ParseFileToWasmStack (bool printStack = true) {
 					_Stack_[_Ops_Count_] = *varsetop;
 					_Ops_Count_++;
 				}
-				/*****************************************************/
+				
+				#pragma endregion
 
 				// automatically jumps to the next line when encounters a comment
 				bool hasComment = false;
@@ -954,7 +1065,10 @@ void ParseFileToWasmStack (bool printStack = true) {
 	cout << "file compiled successfully!\n\n";
 }
 
-/*		 MAIN PROGRAM		*/
+#pragma endregion
+
+#pragma MAIN
+
 int main() {
 
 	//Test();
