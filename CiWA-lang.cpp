@@ -1,6 +1,5 @@
 ﻿//
 // CiWA-lang.cpp: Main file
-// TODO : work with the v-string syntax
 //
 
 #include "./CiWA-lang.h"
@@ -160,17 +159,25 @@ t_float128 CreateFloat128() {
 #pragma region GENERAL UTILS
 
 unsigned long itIndex = 0;
-string GetToken(string str, char delim, bool resetItIndex = false) {
-	if (resetItIndex) {
-		itIndex = 0;
-	}
+unsigned long GetStringIterator() {
+	return itIndex;
+}
 
+void ResetStringIterator() {
+	itIndex = 0;
+}
+
+void MoveStringIterator(long value) {
+	itIndex += value;
+}
+
+string GetToken(string str, char delim) {
 	if (str == "") {
 		return "";
 	}
 
 	int delimIndex = -1;
-	for (int i = itIndex; i <= str.size(); i++) {
+	for (int i = GetStringIterator(); i <= str.size(); i++) {
 		if (str[i] == delim || str[i] == '\0') {
 			delimIndex = i;
 			break;
@@ -181,8 +188,8 @@ string GetToken(string str, char delim, bool resetItIndex = false) {
 		return "";
 	}
 
-	string ret = str.substr(itIndex, (delimIndex - itIndex));
-	itIndex += (delimIndex - itIndex) + 1;
+	string ret = str.substr(GetStringIterator(), (delimIndex - GetStringIterator()));
+	MoveStringIterator((delimIndex - GetStringIterator()) + 1);
 	return ret;
 }
 
@@ -301,9 +308,15 @@ t_float128* StrToFloat128(string str) {
 	return &ret;
 }
 
-string GetVarchar(string line, string token) {
+string GetVarchar(string line, string token, long lineNumber) {
+	MoveStringIterator(-token.size());
 	char toCheck = '\0';
-	short start, countChars = -1;
+	short start = line.find(token);
+	short countChars = 0;
+
+	if (start == string::npos) {
+		return "";
+	}
 
 	if (token[0] == '"') {
 		toCheck = '"';
@@ -313,29 +326,111 @@ string GetVarchar(string line, string token) {
 	}
 
 	if (toCheck != '\0') {
-		start = line.find(token);
-		countChars = start + 1;
 		char temp = '\0';
 		do {
-			if (countChars == line.size()) {
-				return "";
-			}
-			temp = line[countChars];
 			countChars++;
-			if (temp == toCheck) {
-				break;
+			if (line[start+countChars] == '\0' || (countChars+start) == line.size()) {
+				cout << "--- syntax error in line (" << lineNumber << "): '" << line << "'; <-- text variable unclosed.\n";
+				exit(1);
 			}
+			temp = line[start+countChars];
 		} while (temp != toCheck);
-		itIndex += countChars-start-2;
-		return line.substr(start+1, countChars-start-2);
+		MoveStringIterator(countChars);
+
+		string ret = "";
+		if(countChars-1 -start == 0) {
+			return ret;
+		}
+
+		ret = line.substr(start+1, countChars-1);
+
+		// if it's a v-string, the 'v' character comes together
+		if (line[countChars] == 'v') {
+			MoveStringIterator(1);
+			ret.insert(0, "<v-string>");
+			ret.append("</v-string>");
+		}
+
+		return ret;
 	}
 
 	return "";
 }
 
+bool IsVString(string* text) {
+	size_t pos1 = text->find("<v-string>");	// 10 characters-count
+	size_t pos2 = text->find("</v-string>"); // 11 characters-count
+	if (pos1 != string::npos && pos2 != string::npos) {
+		text->replace(pos1, 10, "");
+		text->replace(pos2, 11, "");
+
+		return true;
+	}
+	return false;
+}
+
+std::tuple<long, long> VStringHasVariable(string text) {
+	size_t pos1 = text.find("{");
+	size_t pos2 = text.find("}");
+	if (pos1 != string::npos && pos2 != string::npos) {
+		return std::tuple<long, long>{pos1, pos2+1 -pos1};
+	}
+	return std::tuple<long, long> {-1, -1};
+}
+
+void Trim(string* text) {
+	size_t emptyPos = text->find(" ");
+	while (emptyPos != string::npos) {
+		text->replace(emptyPos, 1, "");
+		emptyPos = text->find(" ");
+	}
+}
+
+void TrimLeft(string* text, bool removeEOString = false) {
+	replace(text->begin(), text->end(), '\t', *StrToCharPointer(" "));
+	while ((*text)[0] == ' ' || ((*text)[0] == '\0' && removeEOString)) {
+		*text = text->substr(1, text->size());
+	}
+}
+
 #pragma endregion
 
 #pragma region OPERATION UTILS
+
+operation* FindOperationByLabel(string label, bool lastVal) {
+	operation* ret = NULL;
+	for (int i = 0; i < _Ops_Count_; i++) {
+		operation* op = &_Stack_[i];
+		if (op->OP_LABEL != NULL && label == op->OP_LABEL) {
+			if (!lastVal) {
+				return op;
+			}
+			ret = op;
+		}
+	}
+	return ret;
+}
+
+void InterpolateVString(string line, long lineNumber, string* text) {
+	auto variable = VStringHasVariable(*text);
+	while (std::get<0>(variable) != -1) {
+		// the text will be replaced from pos1 with size 'len' to the actual value of the variable, if found on the _Stack_
+		long pos1 = std::get<0>(variable);
+		long len = std::get<1>(variable);
+		string label = text->substr(pos1 + 1, len - 1);
+		Trim(&label);
+
+		operation* varlastvalop = FindOperationByLabel(label, true);
+		if (varlastvalop == NULL) {
+			cout << "--- compile error in line (" << lineNumber + 1 << "): '" << line << "'; <-- variable name '" << label << "' not declared.\n";
+			exit(1);
+		}
+
+		text->replace(pos1, len, varlastvalop->OP_VALUE);
+
+		variable = VStringHasVariable(*text);
+	}
+}
 
 void OpPush(string line, string word, long lineNumber, short OP_TYPE, short size) {
 	operation op;
@@ -355,13 +450,18 @@ void OpPush(string line, string word, long lineNumber, short OP_TYPE, short size
 	}
 
 	if (word[0] == '"' || word[0] == '\'') { // generic 'var', strings and character values
-		word = GetVarchar(line, word);
-		if (word == "") {
-			cout << "--- syntax error in line (" << lineNumber << "): '" << line << "'; <-- text variable unclosed.\n";
-			exit(1);
+		word = GetVarchar(line, word, lineNumber);
+
+		if (IsVString(&word)) {
+			// while it has variables inside, then needs to find the variable in the _Stack_ and replace with its value
+			InterpolateVString(line, lineNumber, &word);
+			op.OP_VALUE = StrToCharPointer(word);
+			op.OP_TEXTFLAG = true;
 		}
-		op.OP_VALUE = StrToCharPointer(word);
-		op.OP_TEXTFLAG = true;
+		else {
+			op.OP_VALUE = StrToCharPointer(word);
+			op.OP_TEXTFLAG = true;
+		}
 	}
 	else {
 		if (OP_TYPE == __OP_BOOLEANPUSH__) {
@@ -504,11 +604,13 @@ void IfPush(string line, string word, long countLines) {
 	}
 	// defines if the word token is a text value, a number or a variable's name
 	if(word[0] == '"' || word[0] == '\'') {
-		string token = GetVarchar(line, word);
-		if(token == "") {
-			cout << "--- syntax error in line (" << countLines << "): '" << line << "'; <-- text variable unclosed.\n";
+		string token = GetVarchar(line, word, countLines);
+		if (IsVString(&token)) {
+			cout << "--- syntax error in line (" << countLines + 1 << "): '" << line << "'; <-- expected variable name or a constant for conditional test definition.\n" <<
+					"\t--- additional information: v-strings are not considered constants.\n";
 			exit(1);
 		}
+
 		// TODO : string constant case - create a memory space at the start of the _Stack_ to be referenced later on with its const index
 		poporconstop->OP_TYPE = __OP_MEMORY__;
 		poporconstop->OP_LABEL = StrToCharPointer("Memory");
@@ -618,7 +720,7 @@ int Test () {
 
 #pragma region PARSER
 
-void ParseFileToWasmStack (bool printStack = true) {
+void ParseFileToWasmStack (bool printStack = false) {
 	fstream file("../../../sample3.cw", ios::in); // ios::out | ios::trunc | ios::app
 	short countElsif = 0;
 
@@ -631,13 +733,12 @@ void ParseFileToWasmStack (bool printStack = true) {
 			if (line.empty()) { // if it's an empty line, just jump to the next one
 				continue;
 			}
-			replace(line.begin(), line.end(), '\t', *StrToCharPointer("    "));
-			while (line[0] == '\0' || line[0] == ' ') {
-				line = line.substr(1, line.size());
-			}
+			
+			TrimLeft(&line, true);
+			ResetStringIterator();
 
 			// PARSE the file
-			string word = GetToken(StrToCharPointer(line), ' ', true);
+			string word = GetToken(StrToCharPointer(line), ' ');
 			while (word != "") {
 				if (word[0] == ';' || word == "") { // if it's a comment or empty line, just jump to the next one
 					break;
@@ -781,6 +882,7 @@ void ParseFileToWasmStack (bool printStack = true) {
 				// need to iterate through the _Stack_ and discover which block isn't closed yet, then
 				// TODO : needs to check whether a block isn't closed till the end of the code to throw a compiler error
 				//		- maybe do this in a second step, iterating through the _Stack_
+				//		- it could be done always here, but would have a very poor performance
 				else if (word == "end") {
 					string closingBlock = DiscoverBlockToClose();
 
@@ -838,10 +940,9 @@ void ParseFileToWasmStack (bool printStack = true) {
 					}
 
 					if (word[0] == '"' || word[0] == '\'') { // generic 'var', strings and character values
-						word = GetVarchar(line, word);
-						if (word == "") {
-							cout << "--- syntax error in line (" << countLines << "): '" << line << "'; <-- text variable unclosed.\n";
-							exit(1);
+						word = GetVarchar(line, word, countLines);
+						if (IsVString(&word)) {
+							InterpolateVString(line, countLines+1, &word);
 						}
 						op->OP_VALUE = StrToCharPointer(word);
 						op->OP_TEXTFLAG = true;
@@ -864,16 +965,7 @@ void ParseFileToWasmStack (bool printStack = true) {
 					[X] otherwise goes ahead and updates the variable's value - needs to be a new operation
 				*/
 				else {
-					operation* varDefinition = NULL;
-					for (int i = 0; i < _Ops_Count_; i++) {
-						operation* op = &_Stack_[i];
-						if (op->OP_LABEL != NULL) {
-							if (word == op->OP_LABEL) {
-								varDefinition = &*op;
-								break;
-							}
-						}
-					}
+					operation* varDefinition = FindOperationByLabel(word, false);
 					if (varDefinition == NULL) {
 						cout << "--- compile error in line (" << countLines + 1 << "): '" << line << "'; <-- variable name '" << word << "' not declared.\n";
 						exit(1);
@@ -893,10 +985,9 @@ void ParseFileToWasmStack (bool printStack = true) {
 					// tests if it's either a generic var reattribution or another type
 					if (varDefinition->OP_TYPE == __OP_VARPUSH__) { // generic 'var', any value or type accepted
 						if (word[0] == '"' || word[0] == '\'') { // if it's a text value...
-							word = GetVarchar(line, word);
-							if (word == "") {
-								cout << "--- syntax error in line (" << countLines << "): '" << line << "'; <-- text variable unclosed.\n";
-								exit(1);
+							word = GetVarchar(line, word, countLines);
+							if (IsVString(&word)) {
+								InterpolateVString(line, countLines+1, &word);
 							}
 							varsetop->OP_VALUE = StrToCharPointer(word);
 							varsetop->OP_TEXTFLAG = true;		// forces the var to be a text one, if it wasn't
@@ -1028,20 +1119,14 @@ void ParseFileToWasmStack (bool printStack = true) {
 				#pragma endregion
 
 				// automatically jumps to the next line when encounters a comment
-				bool hasComment = false;
-				for (int i = itIndex; i <= line.size(); i++) {
-					if (line[i] == ';') {
-						hasComment = true;
-						break;
-					}
+				long itPos = GetStringIterator();
+				string subline = line.substr(itPos, line.size()-itPos);
+				TrimLeft(&subline);
+				if (subline[0] == ';') {
+					break;
 				}
-				
-				if (!hasComment && itIndex == sizeof(line)) {
-					word = GetToken(line, ' ', true);
-				}
-				else {
-					word = GetToken(line, ' ');
-				}
+
+				word = GetToken(line, ' ');
 			}
 		}
 
@@ -1049,6 +1134,10 @@ void ParseFileToWasmStack (bool printStack = true) {
 			cout << "Stack: \n\n";
 			for (int i = 0; i < _Ops_Count_; i++) {
 				operation* op = &_Stack_[i];
+				if (op->OP_VALUE == NULL) {
+					break;
+				}
+
 				cout << "   #" << i << "   OP_TYPE = " << op->OP_TYPE << "   OP_LABEL = " << op->OP_LABEL;
 				cout << "   OP_VALUE = " << op->OP_VALUE << "\n\n";
 				advance(op, 1);
@@ -1073,7 +1162,7 @@ int main() {
 
 	//Test();
 
-	ParseFileToWasmStack();
+	ParseFileToWasmStack(true);
 
 	return 0;
 }

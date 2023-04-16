@@ -39,9 +39,9 @@ end
 
 ### Boolean:         bool                                            (basic true or false)
 
-### Data Structure:  struct                                          (class-like structure that supports methods and attributes)
+### Data Structure:  struct                                          (class-like structure that supports functions and attributes)
 
-### Dictionary:      dict                                            (array-like data structure that stores a tuple (key, value) data for each position)
+### Dictionary:      dict                                            (array-like data structure that stores a tuple (key, value) data for each position - JSON Notation)
 
 ### Array/List:      array[type]                                     (stores [0:n] elements and the counter for the elements of the given type)
 
