@@ -1,9 +1,8 @@
 ;; Example of WAT possibly generated relating to "sample1.cw"
 ;; 
 (module
-    (import "console" "log" (func $println (param i32 i32)))
-
-    (memory 1 1024)
+    (import "env" "log" (func $println (param i32 i32)))
+  	(import "env" "memory" (memory 1))
 
     (data (offset (i32.const 0)) "a is 1")        ;; storing "a is 1"
     (global $stroff_0x00000000 i32 (i32.const 0)) ;; offset of "a is 1" = 0

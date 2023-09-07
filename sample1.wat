@@ -1,7 +1,7 @@
 (module
-  (import "console" "log" (func $println (param i32)))
-  
-  (memory 1 1024)
+  (import "env" "log" (func $println (param i32 i32)))
+  (import "env" "memory" (memory 1))
+
   (data (offset (i32.const 0)) "")
   (data (offset (i32.const 1)) "code")
   (data (offset (i32.const 2)) "...reached")
@@ -13,9 +13,11 @@
      (local.set $i (i32.const 0))
      
      i32.const 0
+     i32.const 0
      call $println
 
      i32.const 1
+     i32.const 4
      call $println
      
      local.get $i
@@ -24,6 +26,7 @@
      (if
         (then
            i32.const 2
+           i32.const 0
            call $println
         )
      )
@@ -34,15 +37,18 @@
      (if
         (then
            i32.const 3
+           i32.const 14
            call $println
         )
         ;; (else )
      )
     
      i32.const 0
+     i32.const 0
      call $println
     
      i32.const 4
+     i32.const 14
      call $println
   )
 

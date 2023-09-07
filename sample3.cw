@@ -10,11 +10,13 @@ while i < 100
 	i++ ;; ++ : incremental-by-1 operation
 end
 
+println "i = {i}"v
+
 ;; end while
 
 ;; for loop
 
-for 1:100 int j =>
+for 1:10 int j =>
 	;; v-string : string with variables inside
 	println "value = {j}"v
 end
