@@ -26,6 +26,7 @@ typedef struct operation {
 	int	  OP_TYPE = -1;
 	char* OP_LABEL = NULL; // the address label or typename for the WebAssembly code
 	char* OP_VALUE = NULL; // can be any size of byte[], basically
+	char* OP_ORIGINAL_VALUE = NULL; // for storing v-strings value before interpolation
 	bool  OP_TEXTFLAG = false; // defines if it's a text variable
 	bool  OP_BLOCK_CLOSED = false; // for block openers, to know when they were already closed
 };
@@ -455,14 +456,11 @@ void OpPush(string line, string word, long lineNumber, short OP_TYPE, short size
 
 		if (IsVString(&word)) {
 			// while it has variables inside, then needs to find the variable in the _Stack_ and replace with its value
+			op.OP_ORIGINAL_VALUE = StrToCharPointer(word);
 			InterpolateVString(line, lineNumber, &word);
-			op.OP_VALUE = StrToCharPointer(word);
-			op.OP_TEXTFLAG = true;
 		}
-		else {
-			op.OP_VALUE = StrToCharPointer(word);
-			op.OP_TEXTFLAG = true;
-		}
+		op.OP_VALUE = StrToCharPointer(word);
+		op.OP_TEXTFLAG = true;
 	}
 	else {
 		if (OP_TYPE == __OP_BOOLEANPUSH__) {
@@ -943,6 +941,7 @@ void ParseFileToWasmStack (bool printStack = false) {
 					if (word[0] == '"' || word[0] == '\'') { // generic 'var', strings and character values
 						word = GetVarchar(line, word, countLines);
 						if (IsVString(&word)) {
+							op->OP_ORIGINAL_VALUE = StrToCharPointer(word);
 							InterpolateVString(line, countLines+1, &word);
 						}
 						op->OP_VALUE = StrToCharPointer(word);
@@ -988,6 +987,7 @@ void ParseFileToWasmStack (bool printStack = false) {
 						if (word[0] == '"' || word[0] == '\'') { // if it's a text value...
 							word = GetVarchar(line, word, countLines);
 							if (IsVString(&word)) {
+								varsetop->OP_ORIGINAL_VALUE = StrToCharPointer(word);
 								InterpolateVString(line, countLines+1, &word);
 							}
 							varsetop->OP_VALUE = StrToCharPointer(word);
